@@ -12,7 +12,7 @@ use windows_sys::Win32::System::LibraryLoader::GetModuleFileNameW;
 pub use args::*;
 pub use vars::*;
 pub use paths::*;
-use crate::fs::{PathBuf, MAX_PATH};
+use crate::path::{PathBuf, MAX_PATH};
 use crate::io::Error;
 use crate::util::get_last_windows_error;
 
@@ -23,7 +23,7 @@ pub fn current_exe() -> crate::io::Result<PathBuf> {
     assert_ne!(path_len, 0, "current_exe() failed: {}", get_last_windows_error());
     let data = String::from_utf16(&path[..path_len]).expect("GetModuleFileNameW returned non UTF-16");
 
-    Ok(PathBuf::from_string(data))
+    Ok(data.into())
 }
 
 pub fn current_dir() -> crate::io::Result<PathBuf> {
@@ -33,7 +33,7 @@ pub fn current_dir() -> crate::io::Result<PathBuf> {
     assert_ne!(path_len, 0, "current_exe() failed: {}", get_last_windows_error());
     let data = String::from_utf16(&path[..path_len]).expect("GetCurrentDirectoryW returned non UTF-16");
 
-    Ok(PathBuf::from_string(data))
+    Ok(data.into())
 }
 
 pub fn set_current_dir<P: AsRef<str>>(path: P) -> crate::io::Result<()> {

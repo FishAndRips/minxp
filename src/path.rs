@@ -1,6 +1,7 @@
 use alloc::borrow::{Cow, ToOwned};
 use alloc::boxed::Box;
 use crate::ffi::{OsStr, OsString};
+use crate::fs::*;
 use alloc::collections::TryReserveError;
 use alloc::string::String;
 use alloc::vec::Vec;
@@ -128,7 +129,14 @@ impl PathBuf {
     pub fn shrink_to(&mut self, amount: usize) {
         self.data.shrink_to(amount)
     }
-    pub(crate) fn from_string(string: String) -> Self {
+    pub(crate) fn from_string(mut string: String) -> Self {
+        // TODO: Discombobulate forward slashes, too
+        if string.starts_with(r#"\\?\"#) {
+            string.remove(0);
+            string.remove(0);
+            string.remove(0);
+            string.remove(0);
+        }
         Self { data: string.into() }
     }
 }
@@ -141,6 +149,10 @@ pub struct Path {
 
 impl Path {
     pub fn new<S: AsRef<OsStr> + ?Sized>(s: &S) -> &Path {
+        let mut s = s.as_ref().as_str();
+        if s.starts_with(r#"\\?\"#) {
+            s = &s[4..];
+        }
         Self::from_os_str(s.as_ref())
     }
 
@@ -342,31 +354,31 @@ impl Path {
     }
 
     pub fn metadata(&self) -> crate::io::Result<Metadata> {
-        todo!()
+        metadata(self)
     }
 
     pub fn symlink_metadata(&self) -> crate::io::Result<Metadata> {
-        todo!()
+        symlink_metadata(self)
     }
 
     pub fn canonicalize(&self) -> crate::io::Result<PathBuf> {
-        todo!()
+        canonicalize(self)
     }
 
-    pub fn read_link(&self) -> crate::io::Result<PathBuf> {
-        todo!()
-    }
+    // pub fn read_link(&self) -> crate::io::Result<PathBuf> {
+    //     read_link(self)
+    // }
 
     pub fn read_dir(&self) -> crate::io::Result<()> {
         todo!()
     }
 
     pub fn exists(&self) -> bool {
-        self.try_exists().expect("unable to query if the file exists")
+        exists_infallible(self)
     }
 
     pub fn try_exists(&self) -> crate::io::Result<bool> {
-        todo!()
+        exists(self)
     }
 
     pub fn is_file(&self) -> bool {
@@ -477,20 +489,15 @@ impl Path {
     pub(crate) fn encode_utf16_path_with_nul(&self) -> Vec<u16> {
         let s = self.inner.as_str();
 
-        let mut c = Vec::with_capacity(s.len() * 2 + 1);
+        let mut c = Vec::with_capacity(self.inner.len() * 2 + 1);
 
-        for i in s.chars() {
-            let mut q = [0,0];
-            let q = if is_separator(i) {
-                MAIN_SEPARATOR.encode_utf16(&mut q)
+        for i in self.components() {
+            if !c.is_empty() {
+                c.extend_from_slice(MAIN_SEPARATOR.encode_utf16(&mut [0,0]));
             }
-            else {
-                i.encode_utf16(&mut q)
-            };
-            c.extend_from_slice(q);
+            c.extend(i.as_str().encode_utf16());
         }
         c.push(0);
-
         c.shrink_to_fit();
         c
     }
@@ -561,21 +568,6 @@ impl AsRef<Path> for str {
 #[derive(Clone, Debug)]
 pub struct StripPrefixError {
 
-}
-
-pub struct Metadata {
-
-}
-impl Metadata {
-    pub fn is_dir(&self) -> bool {
-        todo!()
-    }
-    pub fn is_file(&self) -> bool {
-        todo!()
-    }
-    pub fn is_symlink(&self) -> bool {
-        todo!()
-    }
 }
 
 pub struct Iter<'a> {

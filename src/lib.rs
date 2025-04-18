@@ -4,11 +4,10 @@
 
 extern crate alloc;
 
-
 mod util;
 
 pub mod env;
 pub mod fs;
 pub mod io;
 pub mod path;
-mod ffi;
+pub mod ffi;

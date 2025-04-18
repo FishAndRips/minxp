@@ -1,7 +1,7 @@
+use crate::ffi::OsStr;
 use alloc::vec::Vec;
 use core::iter::once;
 use windows_sys::Win32::Foundation::GetLastError;
-use crate::ffi::OsStr;
 
 /// Get the last error for the current thread.
 pub fn get_last_windows_error() -> u32 {
@@ -59,3 +59,32 @@ impl<S: AsRef<OsStr>> AsUtf16Nul for S {
         encode_utf16_with_nul(self.as_ref().as_str())
     }
 }
+
+#[macro_export]
+macro_rules! get_proc_from_module {
+    ($module:literal, $function:literal) => {{
+        use windows_sys::Win32::System::LibraryLoader::{GetModuleHandleW, GetProcAddress};
+        use windows_sys::{s, w};
+
+        // SAFETY: This is safe since we are just getting data. We aren't actually using the function
+        //         we're trying to get.
+        let module = unsafe {
+            GetModuleHandleW(w!($module))
+        };
+        if !module.is_null() {
+            let get_final_path_name_by_handle = unsafe { GetProcAddress(module, s!($function)) };
+            if let Some(m) = get_final_path_name_by_handle {
+                // SAFETY: Hopefully the caller knows what they're doing...
+                unsafe { core::mem::transmute(m) }
+            }
+            else {
+                None
+            }
+        }
+        else {
+            None
+        }
+
+    }};
+}
+

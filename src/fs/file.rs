@@ -1,0 +1,278 @@
+use crate::fs::Metadata;
+use crate::io::*;
+use crate::path::Path;
+use crate::util::get_last_windows_error;
+use alloc::borrow::ToOwned;
+use alloc::format;
+use alloc::string::String;
+use alloc::vec::Vec;
+use core::mem::zeroed;
+use core::ptr::{null, null_mut};
+use windows_sys::Win32::Foundation::{CloseHandle, SetLastError, GENERIC_READ, GENERIC_WRITE, HANDLE, NO_ERROR, TRUE};
+use windows_sys::Win32::Storage::FileSystem::{CreateFileW, FlushFileBuffers, GetFileInformationByHandle, ReadFile, SetFilePointer, WriteFile, CREATE_ALWAYS, CREATE_NEW, FILE_APPEND_DATA, FILE_ATTRIBUTE_NORMAL, FILE_BEGIN, FILE_CURRENT, FILE_END, FILE_SHARE_READ, FILE_SHARE_WRITE, INVALID_SET_FILE_POINTER, OPEN_EXISTING, TRUNCATE_EXISTING};
+
+pub fn write<P: AsRef<Path>, C: AsRef<[u8]>>(path: P, contents: C) -> Result<()> {
+    File::create(path).and_then(|mut f| f.write_all(contents.as_ref()))
+}
+
+pub fn read<P: AsRef<Path>>(path: P) -> Result<Vec<u8>> {
+    let mut file = File::open(path)?;
+    let mut v = Vec::new();
+    file.read_to_end(&mut v)?;
+    Ok(v)
+}
+
+pub fn read_to_string<P: AsRef<Path>>(path: P) -> Result<String> {
+    read(path).and_then(|s| {
+        String::from_utf8(s).map_err(|e| Error { reason: format!("cannot read_to_string due to UTF-8 parsing error: {e:?}") })
+    })
+}
+
+pub struct File {
+    handle: HANDLE
+}
+
+impl File {
+    pub fn open<P: AsRef<Path>>(path: P) -> Result<Self> {
+        Self::options().read(true).open(path)
+    }
+
+    pub fn create<P: AsRef<Path>>(path: P) -> Result<Self> {
+        Self::options().create(true).open(path)
+    }
+
+    pub fn create_new<P: AsRef<Path>>(path: P) -> Result<Self> {
+        Self::options().create_new(true).open(path)
+    }
+
+    pub fn options() -> OpenOptions {
+        OpenOptions::new()
+    }
+
+    pub fn metadata(&self) -> Result<Metadata> {
+        let mut file_info = unsafe { zeroed() };
+        let result = unsafe { GetFileInformationByHandle(self.handle, &mut file_info) };
+        if result != TRUE {
+            let error = get_last_windows_error();
+            return Err(Error { reason: format!("failed to get metadata for an open file: {error}") })
+        }
+        Ok(Metadata::new(file_info))
+    }
+}
+
+impl Read for File {
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
+        let bytes_to_read = buf.len().min(u32::MAX as usize) as u32;
+        let mut bytes_read = 0;
+
+        let success = unsafe { ReadFile(
+            self.handle,
+            buf.as_mut_ptr(),
+            bytes_to_read,
+            &mut bytes_read,
+            null_mut()
+        ) };
+
+        if success != TRUE {
+            let reason = get_last_windows_error();
+            return Err(Error { reason: format!("failed to read file: {reason}") })
+        }
+
+        Ok(bytes_read as usize)
+    }
+
+    fn read_to_end(&mut self, data: &mut Vec<u8>) -> Result<()> {
+        if let Ok(attribute_data) = self.metadata() {
+            let len = attribute_data.len().saturating_add(256);
+            if len > (isize::MAX as u64) || data.try_reserve(len as usize).is_err() {
+                return Err(Error { reason: "not enough RAM to read the file".to_owned() })
+            }
+        }
+
+        loop {
+            let start = data.len();
+            if start == data.capacity() && data.try_reserve(256 * 1024).is_err() {
+                core::mem::take(data);
+                return Err(Error { reason: "not enough RAM to read the file".to_owned() })
+            }
+
+            data.resize(data.capacity(), 0);
+
+            match self.read(&mut data[start..]) {
+                Ok(d) => data.truncate(start + d),
+                Err(e) => {
+                    core::mem::take(data);
+                    return Err(e)
+                }
+            }
+
+            // TODO: Better handle EOF?
+            if start == data.len() {
+                return Ok(());
+            }
+        }
+    }
+}
+
+impl Write for File {
+    fn write(&mut self, buf: &[u8]) -> Result<usize> {
+        let bytes_to_write = buf.len().min(u32::MAX as usize) as u32;
+
+        let mut number_of_bytes_written = 0;
+        let result = unsafe {
+            WriteFile(
+                self.handle,
+                buf.as_ptr(),
+                bytes_to_write,
+                &mut number_of_bytes_written,
+                null_mut()
+            )
+        };
+        if result != TRUE {
+            let error = get_last_windows_error();
+            return Err(Error { reason: format!("failed to write to file: {error}") })
+        }
+        Ok(number_of_bytes_written as usize)
+    }
+
+    fn flush(&mut self) -> Result<()> {
+        let result = unsafe {
+            FlushFileBuffers(self.handle)
+        };
+        if result != TRUE {
+            let error = get_last_windows_error();
+            return Err(Error { reason: format!("failed to flush file: {error}") })
+        }
+        Ok(())
+    }
+}
+
+impl Drop for File {
+    fn drop(&mut self) {
+        unsafe { CloseHandle(self.handle) };
+    }
+}
+
+impl Seek for File {
+    fn seek(&mut self, pos: SeekFrom) -> Result<u64> {
+        let (offset, method) = match pos {
+            SeekFrom::Current(q) => (q as u64, FILE_CURRENT),
+            SeekFrom::Start(q) => (q, FILE_BEGIN),
+            SeekFrom::End(q) => (q as u64, FILE_END),
+        };
+
+        let mut high = (offset >> 32) as u32;
+        let mut low = offset as u32;
+
+        low = unsafe {
+            SetLastError(NO_ERROR);
+            SetFilePointer(
+                self.handle,
+                low as i32,
+                &mut high as *mut _ as *mut i32,
+                method
+            )
+        };
+
+        let last_error = get_last_windows_error();
+        if low == INVALID_SET_FILE_POINTER && last_error != NO_ERROR {
+            return Err(Error { reason: format!("failed to seek: {last_error}") })
+        };
+
+        Ok((high as u64) << 32 | (low as u64))
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct OpenOptions {
+    read: bool,
+    write: bool,
+    append: bool,
+    truncate: bool,
+    create: bool,
+    create_new: bool,
+}
+impl OpenOptions {
+    pub fn new() -> Self {
+        Self {
+            read: false,
+            write: false,
+            append: false,
+            truncate: false,
+            create: false,
+            create_new: false,
+        }
+    }
+    pub fn read(&mut self, read: bool) -> &mut Self {
+        self.read = read;
+        self
+    }
+    pub fn write(&mut self, write: bool) -> &mut Self {
+        self.write = write;
+        self
+    }
+    pub fn append(&mut self, append: bool) -> &mut Self {
+        self.append = append;
+        self
+    }
+    pub fn truncate(&mut self, truncate: bool) -> &mut Self {
+        self.truncate = truncate;
+        self
+    }
+    pub fn create(&mut self, create: bool) -> &mut Self {
+        self.create = create;
+        self
+    }
+    pub fn create_new(&mut self, create_new: bool) -> &mut Self {
+        self.create_new = create_new;
+        self
+    }
+
+    pub fn open<P: AsRef<Path>>(&self, path: P) -> Result<File> {
+        let mut desired_access = 0;
+        let mut share_access = 0;
+
+        if self.write {
+            desired_access |= GENERIC_WRITE;
+            share_access |= FILE_SHARE_WRITE;
+        }
+        if self.read {
+            desired_access |= GENERIC_READ;
+            share_access |= FILE_SHARE_READ;
+        }
+        if self.append {
+            desired_access |= FILE_APPEND_DATA;
+            share_access |= FILE_SHARE_WRITE;
+        }
+
+        let handle = unsafe {
+            CreateFileW(
+                path.as_ref().encode_utf16_path_with_nul().as_ptr(),
+                desired_access,
+                share_access,
+                null(),
+                if self.create_new {
+                    CREATE_NEW
+                }
+                else if self.create {
+                    CREATE_ALWAYS
+                }
+                else if self.truncate {
+                    TRUNCATE_EXISTING
+                }
+                else {
+                    OPEN_EXISTING
+                },
+                FILE_ATTRIBUTE_NORMAL,
+                null_mut()
+            )
+        };
+
+        if handle.is_null() {
+            let error = get_last_windows_error();
+            return Err(Error { reason: format!("cannot open file: {error}") })
+        }
+
+        Ok(File { handle })
+    }
+}

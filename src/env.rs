@@ -2,7 +2,7 @@ mod args;
 mod vars;
 mod paths;
 
-use alloc::format;
+use alloc::{format, vec};
 use alloc::string::String;
 use alloc::vec::Vec;
 use core::iter::once;
@@ -12,12 +12,12 @@ use windows_sys::Win32::System::LibraryLoader::GetModuleFileNameW;
 pub use args::*;
 pub use vars::*;
 pub use paths::*;
-use crate::path::{PathBuf, MAX_PATH};
+use crate::path::PathBuf;
 use crate::io::Error;
 use crate::util::get_last_windows_error;
 
 pub fn current_exe() -> crate::io::Result<PathBuf> {
-    let mut path = [0u16; 1 + MAX_PATH];
+    let mut path = vec![0u16; 32768];
     let path_len = unsafe { GetModuleFileNameW(null_mut(), path.as_mut_ptr(), path.len() as u32) } as usize;
 
     assert_ne!(path_len, 0, "current_exe() failed: {}", get_last_windows_error());
@@ -27,7 +27,7 @@ pub fn current_exe() -> crate::io::Result<PathBuf> {
 }
 
 pub fn current_dir() -> crate::io::Result<PathBuf> {
-    let mut path = [0u16; 1 + MAX_PATH];
+    let mut path = vec![0u16; 32768];
     let path_len = unsafe { GetCurrentDirectoryW(path.len() as u32, path.as_mut_ptr()) } as usize;
 
     assert_ne!(path_len, 0, "current_exe() failed: {}", get_last_windows_error());

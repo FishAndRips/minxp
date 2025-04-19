@@ -4,11 +4,15 @@ use spin::{Lazy, Mutex};
 use windows_sys::Win32::Foundation::{FALSE, HANDLE, INVALID_HANDLE_VALUE};
 use windows_sys::Win32::Globalization::CP_UTF8;
 use windows_sys::Win32::Storage::FileSystem::FlushFileBuffers;
-use windows_sys::Win32::System::Console::{GetStdHandle, SetConsoleCP, WriteConsoleA, STD_ERROR_HANDLE, STD_OUTPUT_HANDLE};
+use windows_sys::Win32::System::Console::{GetStdHandle, SetConsoleCP, SetConsoleOutputCP, WriteConsoleA, STD_ERROR_HANDLE, STD_OUTPUT_HANDLE};
 use crate::io::Write;
 
 fn enable_utf8() {
+    // for input
     unsafe { SetConsoleCP(CP_UTF8) };
+
+    // for output
+    unsafe { SetConsoleOutputCP(CP_UTF8) };
 }
 
 static STDOUT_HANDLE: Lazy<Stdout> = Lazy::new(|| {

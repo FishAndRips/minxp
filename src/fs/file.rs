@@ -8,8 +8,8 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use core::mem::zeroed;
 use core::ptr::{null, null_mut};
-use windows_sys::Win32::Foundation::{CloseHandle, SetLastError, GENERIC_READ, GENERIC_WRITE, HANDLE, NO_ERROR, TRUE};
-use windows_sys::Win32::Storage::FileSystem::{CreateFileW, FlushFileBuffers, GetFileInformationByHandle, ReadFile, SetFilePointer, WriteFile, CREATE_ALWAYS, CREATE_NEW, FILE_APPEND_DATA, FILE_ATTRIBUTE_NORMAL, FILE_BEGIN, FILE_CURRENT, FILE_END, FILE_SHARE_READ, FILE_SHARE_WRITE, INVALID_SET_FILE_POINTER, OPEN_EXISTING, TRUNCATE_EXISTING};
+use windows_sys::Win32::Foundation::{CloseHandle, GENERIC_READ, GENERIC_WRITE, HANDLE, TRUE};
+use windows_sys::Win32::Storage::FileSystem::{CreateFileW, FlushFileBuffers, GetFileInformationByHandle, ReadFile, SetFilePointerEx, WriteFile, CREATE_ALWAYS, CREATE_NEW, FILE_APPEND_DATA, FILE_ATTRIBUTE_NORMAL, FILE_BEGIN, FILE_CURRENT, FILE_END, FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING, TRUNCATE_EXISTING};
 
 pub fn write<P: AsRef<Path>, C: AsRef<[u8]>>(path: P, contents: C) -> Result<()> {
     File::create(path).and_then(|mut f| f.write_all(contents.as_ref()))
@@ -58,6 +58,13 @@ impl File {
         }
         Ok(Metadata::new(file_info))
     }
+
+    fn remaining_data_in_stream(&mut self) -> Result<u64> {
+        let pos = self.seek_position()?;
+        let end = self.seek(SeekFrom::End(0))?;
+        self.seek(SeekFrom::Start(pos))?;
+        Ok(end - pos)
+    }
 }
 
 impl Read for File {
@@ -82,22 +89,14 @@ impl Read for File {
     }
 
     fn read_to_end(&mut self, data: &mut Vec<u8>) -> Result<()> {
-        if let Ok(attribute_data) = self.metadata() {
-            let len = attribute_data.len().saturating_add(256);
-            if len > (isize::MAX as u64) || data.try_reserve(len as usize).is_err() {
-                return Err(Error { reason: "not enough RAM to read the file".to_owned() })
-            }
+        let len = self.remaining_data_in_stream()?;
+        if len > (isize::MAX as u64) || data.try_reserve_exact(len as usize).is_err() {
+            return Err(Error { reason: "not enough RAM to read the file".to_owned() })
         }
 
-        loop {
+        while data.len() < len as usize {
             let start = data.len();
-            if start == data.capacity() && data.try_reserve(256 * 1024).is_err() {
-                core::mem::take(data);
-                return Err(Error { reason: "not enough RAM to read the file".to_owned() })
-            }
-
             data.resize(data.capacity(), 0);
-
             match self.read(&mut data[start..]) {
                 Ok(d) => data.truncate(start + d),
                 Err(e) => {
@@ -111,6 +110,8 @@ impl Read for File {
                 return Ok(());
             }
         }
+
+        Ok(())
     }
 }
 
@@ -156,30 +157,28 @@ impl Drop for File {
 impl Seek for File {
     fn seek(&mut self, pos: SeekFrom) -> Result<u64> {
         let (offset, method) = match pos {
-            SeekFrom::Current(q) => (q as u64, FILE_CURRENT),
-            SeekFrom::Start(q) => (q, FILE_BEGIN),
-            SeekFrom::End(q) => (q as u64, FILE_END),
+            SeekFrom::Current(q) => (q, FILE_CURRENT),
+            SeekFrom::Start(q) => (q as i64, FILE_BEGIN), // will be interpreted as unsigned by SetFilePointerEx
+            SeekFrom::End(q) => (q, FILE_END),
         };
 
-        let mut high = (offset >> 32) as u32;
-        let mut low = offset as u32;
+        let mut offset = 0u64;
 
-        low = unsafe {
-            SetLastError(NO_ERROR);
-            SetFilePointer(
+        let success = unsafe {
+            SetFilePointerEx(
                 self.handle,
-                low as i32,
-                &mut high as *mut _ as *mut i32,
+                offset as i64,
+                &mut offset as *mut _ as *mut i64,
                 method
             )
         };
 
-        let last_error = get_last_windows_error();
-        if low == INVALID_SET_FILE_POINTER && last_error != NO_ERROR {
+        if success != TRUE {
+            let last_error = get_last_windows_error();
             return Err(Error { reason: format!("failed to seek: {last_error}") })
         };
 
-        Ok((high as u64) << 32 | (low as u64))
+        Ok(offset)
     }
 }
 

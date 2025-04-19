@@ -207,13 +207,13 @@ impl Seek for File {
             SeekFrom::End(q) => (q, FILE_END),
         };
 
-        let mut offset = 0u64;
+        let mut new_offset = 0u64;
 
         let success = unsafe {
             SetFilePointerEx(
                 self.handle,
                 offset as i64,
-                &mut offset as *mut _ as *mut i64,
+                &mut new_offset as *mut _ as *mut i64,
                 method
             )
         };
@@ -223,7 +223,7 @@ impl Seek for File {
             return Err(Error { reason: format!("failed to seek: {last_error}") })
         };
 
-        Ok(offset)
+        Ok(new_offset)
     }
 }
 

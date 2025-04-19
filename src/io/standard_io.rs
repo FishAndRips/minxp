@@ -1,10 +1,10 @@
 use alloc::sync::Arc;
-use core::ptr::null;
+use core::ptr::{null, null_mut};
 use spin::{Lazy, Mutex};
 use windows_sys::Win32::Foundation::{FALSE, HANDLE, INVALID_HANDLE_VALUE};
 use windows_sys::Win32::Globalization::CP_UTF8;
-use windows_sys::Win32::Storage::FileSystem::FlushFileBuffers;
-use windows_sys::Win32::System::Console::{GetStdHandle, SetConsoleCP, SetConsoleOutputCP, WriteConsoleA, STD_ERROR_HANDLE, STD_OUTPUT_HANDLE};
+use windows_sys::Win32::Storage::FileSystem::{FlushFileBuffers, WriteFile};
+use windows_sys::Win32::System::Console::{GetConsoleMode, GetStdHandle, SetConsoleCP, SetConsoleOutputCP, WriteConsoleA, STD_ERROR_HANDLE, STD_OUTPUT_HANDLE};
 use crate::io::Write;
 
 fn enable_utf8() {
@@ -17,30 +17,39 @@ fn enable_utf8() {
 
 static STDOUT_HANDLE: Lazy<Stdout> = Lazy::new(|| {
     let handle = unsafe { GetStdHandle(STD_OUTPUT_HANDLE) };
-    Stdout::new(Arc::new(Mutex::new((!handle.is_null() && handle != INVALID_HANDLE_VALUE).then(|| {
+    let mut is_console = false;
+    let handle = Arc::new(Mutex::new((!handle.is_null() && handle != INVALID_HANDLE_VALUE).then(|| {
         enable_utf8();
+        is_console = unsafe { GetConsoleMode(handle, &mut 0) != FALSE };
         handle
-    }))))
+    })));
+
+    Stdout::new(handle, is_console)
 });
 
 static STDERR_HANDLE: Lazy<Stderr> = Lazy::new(|| {
     let handle = unsafe { GetStdHandle(STD_ERROR_HANDLE) };
-    Stderr::new(Arc::new(Mutex::new((!handle.is_null() && handle != INVALID_HANDLE_VALUE).then(|| {
+    let mut is_console = false;
+    let handle = Arc::new(Mutex::new((!handle.is_null() && handle != INVALID_HANDLE_VALUE).then(|| {
         enable_utf8();
+        is_console = unsafe { GetConsoleMode(handle, &mut 0) != FALSE };
         handle
-    }))))
+    })));
+
+    Stderr::new(handle, is_console)
 });
 
 macro_rules! impl_stdout {
     ($type:tt) => {
         pub struct $type {
-            handle: Arc<Mutex<Option<HANDLE>>>
+            handle: Arc<Mutex<Option<HANDLE>>>,
+            is_console: bool
         }
 
         impl $type {
-            fn new(handle: Arc<Mutex<Option<HANDLE>>>) -> Self {
+            fn new(handle: Arc<Mutex<Option<HANDLE>>>, is_console: bool) -> Self {
                 Self {
-                    handle
+                    handle, is_console
                 }
             }
         }
@@ -53,13 +62,24 @@ macro_rules! impl_stdout {
                     for i in buf.chunks(u32::MAX as usize) {
                         let mut written = 0u32;
                         let success = unsafe {
-                            WriteConsoleA(
-                                *n,
-                                i.as_ptr(),
-                                i.len() as u32,
-                                &mut written,
-                                null()
-                            )
+                            if self.is_console {
+                                WriteConsoleA(
+                                    *n,
+                                    i.as_ptr(),
+                                    i.len() as u32,
+                                    &mut written,
+                                    null()
+                                )
+                            }
+                            else {
+                                WriteFile(
+                                    *n,
+                                    i.as_ptr(),
+                                    i.len() as u32,
+                                    &mut written,
+                                    null_mut()
+                                )
+                            }
                         };
                         if success == FALSE {
                             break;
@@ -108,9 +128,11 @@ impl_stdout!(Stdout);
 impl_stdout!(Stderr);
 
 pub fn stdout() -> Stdout {
-    Stdout { handle: STDOUT_HANDLE.handle.clone() }
+    let h = &*STDERR_HANDLE;
+    Stdout { handle: h.handle.clone(), is_console: h.is_console }
 }
 pub fn stderr() -> Stderr {
-    Stderr { handle: STDERR_HANDLE.handle.clone() }
+    let h = &*STDERR_HANDLE;
+    Stderr { handle: h.handle.clone(), is_console: h.is_console }
 }
 

@@ -17,12 +17,18 @@ fn enable_utf8() {
 
 static STDOUT_HANDLE: Lazy<Stdout> = Lazy::new(|| {
     let handle = unsafe { GetStdHandle(STD_OUTPUT_HANDLE) };
-    Stdout::new(Arc::new(Mutex::new((!handle.is_null() && handle != INVALID_HANDLE_VALUE).then_some(handle))))
+    Stdout::new(Arc::new(Mutex::new((!handle.is_null() && handle != INVALID_HANDLE_VALUE).then(|| {
+        enable_utf8();
+        handle
+    }))))
 });
 
 static STDERR_HANDLE: Lazy<Stderr> = Lazy::new(|| {
     let handle = unsafe { GetStdHandle(STD_ERROR_HANDLE) };
-    Stderr::new(Arc::new(Mutex::new((!handle.is_null() && handle != INVALID_HANDLE_VALUE).then_some(handle))))
+    Stderr::new(Arc::new(Mutex::new((!handle.is_null() && handle != INVALID_HANDLE_VALUE).then(|| {
+        enable_utf8();
+        handle
+    }))))
 });
 
 macro_rules! impl_stdout {
@@ -43,8 +49,6 @@ macro_rules! impl_stdout {
             fn write(&mut self, buf: &[u8]) -> crate::io::Result<usize> {
                 let handle = self.handle.lock();
                 if let Some(n) = Option::as_ref(&handle) {
-                    enable_utf8();
-
                     let mut written_total = 0usize;
                     for i in buf.chunks(u32::MAX as usize) {
                         let mut written = 0u32;

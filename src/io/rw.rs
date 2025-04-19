@@ -21,6 +21,9 @@ pub trait Read {
 
     // TODO: Implement EOF handling
     fn read_to_end(&mut self, into: &mut Vec<u8>) -> Result<()>;
+
+    // TODO: Implement EOF handling
+    fn read_exact(&mut self, buf: &mut [u8]) -> Result<()>;
 }
 
 #[derive(Copy, Clone, PartialEq)]

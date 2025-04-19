@@ -148,6 +148,16 @@ impl Read for File {
 
         Ok(())
     }
+
+    fn read_exact(&mut self, buf: &mut [u8]) -> Result<()> {
+        if self.read(buf)? != buf.len() {
+            // ErrorKind::UnexpectedEof
+            Err(Error { reason: "file smaller than buffer".to_owned() })
+        }
+        else {
+            Ok(())
+        }
+    }
 }
 
 impl Write for File {

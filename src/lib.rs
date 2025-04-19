@@ -4,10 +4,12 @@
 
 extern crate alloc;
 
+#[macro_use]
+mod print;
 mod util;
-
 pub mod env;
 pub mod fs;
 pub mod io;
 pub mod path;
 pub mod ffi;
+

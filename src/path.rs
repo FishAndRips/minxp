@@ -4,10 +4,12 @@ use crate::ffi::{OsStr, OsString};
 use crate::fs::*;
 use alloc::collections::TryReserveError;
 use alloc::string::String;
+use alloc::vec;
 use alloc::vec::Vec;
 use core::borrow::Borrow;
 use core::fmt::{Debug, Display, Formatter};
 use core::ops::Deref;
+use crate::env::current_dir;
 
 #[must_use]
 pub fn is_separator(c: char) -> bool {
@@ -93,7 +95,7 @@ impl PathBuf {
         true
     }
     fn truncate_extraneous_suffixes(&mut self) {
-        self.data.truncate(self.remove_extraneous_suffixes().as_os_str().as_str().len())
+        self.data.truncate(self.remove_extraneous_suffixes().path_len())
     }
     pub fn as_mut_os_string(&mut self) -> &mut OsString {
         &mut self.data
@@ -369,8 +371,8 @@ impl Path {
     //     read_link(self)
     // }
 
-    pub fn read_dir(&self) -> crate::io::Result<()> {
-        todo!()
+    pub fn read_dir(&self) -> crate::io::Result<ReadDir> {
+        read_dir(self)
     }
 
     pub fn exists(&self) -> bool {
@@ -486,9 +488,15 @@ impl Path {
         unsafe { core::str::from_utf8_unchecked(core::slice::from_raw_parts(start, actual_length)).as_ref() }
     }
 
-    pub(crate) fn encode_utf16_path_with_nul(&self) -> Vec<u16> {
-        let s = self.inner.as_str();
+    pub(crate) fn encode_for_win32(&self) -> Vec<u16> {
+        // Some Windows functions violently explode if the path is just "." or ".."
+        match self.as_os_str().as_str() {
+            "." => return current_dir().unwrap().encode_for_win32(),
+            ".." => return current_dir().unwrap().parent().and_then(|p| Some(p.encode_for_win32())).unwrap_or_else(|| vec!['.' as u16, '.' as u16, 0]),
+            _ => ()
+        }
 
+        let s = self.inner.as_str();
         let mut c = Vec::with_capacity(self.inner.len() * 2 + 1);
 
         for i in self.components() {
@@ -500,6 +508,10 @@ impl Path {
         c.push(0);
         c.shrink_to_fit();
         c
+    }
+
+    pub(crate) fn path_len(&self) -> usize {
+        self.as_os_str().as_str().len()
     }
 }
 

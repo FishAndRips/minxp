@@ -201,9 +201,9 @@ fn has_root() {
 #[test]
 fn utf16() {
     // null bytes are stripped from OsStr::from_str
-    assert_eq!(String::from_utf16(&Path::new("C:\\Users\\Something").encode_utf16_path_with_nul()).unwrap(), "C:\\Users\\Something\x00");
-    same_path(String::from_utf16(&Path::new("C:\\Users\\Something").encode_utf16_path_with_nul()).unwrap(), "C:\\Users\\Something");
-    same_path(String::from_utf16(&Path::new("C:\\Users////\\Something").encode_utf16_path_with_nul()).unwrap(), "C:\\Users\\Something");
+    assert_eq!(String::from_utf16(&Path::new("C:\\Users\\Something").encode_for_win32()).unwrap(), "C:\\Users\\Something\x00");
+    same_path(String::from_utf16(&Path::new("C:\\Users\\Something").encode_for_win32()).unwrap(), "C:\\Users\\Something");
+    same_path(String::from_utf16(&Path::new("C:\\Users////\\Something").encode_for_win32()).unwrap(), "C:\\Users\\Something");
 }
 
 #[test]

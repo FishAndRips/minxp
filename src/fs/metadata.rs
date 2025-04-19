@@ -1,18 +1,19 @@
-use alloc::borrow::ToOwned;
-use alloc::boxed::Box;
+use crate::get_proc_from_module;
 use crate::io::Error;
 use crate::path::{Path, PathBuf};
 use crate::util::get_last_windows_error;
-use alloc::{format, vec};
+use alloc::borrow::ToOwned;
+use alloc::boxed::Box;
 use alloc::string::String;
+use alloc::{format, vec};
 use core::mem::zeroed;
 use core::ptr::{null, null_mut};
 use spin::Lazy;
-use windows_sys::Win32::Foundation::{CloseHandle, FALSE, FILETIME, GENERIC_READ, HANDLE, TRUE};
-use windows_sys::Win32::Storage::FileSystem::{CreateFileW, GetFileInformationByHandle, GetFullPathNameW, BY_HANDLE_FILE_INFORMATION, FILE_ATTRIBUTE_DIRECTORY, FILE_ATTRIBUTE_READONLY, FILE_ATTRIBUTE_REPARSE_POINT, FILE_FLAG_OPEN_REPARSE_POINT, FILE_NAME_NORMALIZED, FILE_SHARE_READ, GETFINALPATHNAMEBYHANDLE_FLAGS, OPEN_EXISTING};
+use windows_sys::Win32::Foundation::{CloseHandle, FALSE, FILETIME, HANDLE, INVALID_HANDLE_VALUE};
+use windows_sys::Win32::Storage::FileSystem::{CreateFileW, GetFileInformationByHandle, GetFullPathNameW, BY_HANDLE_FILE_INFORMATION, FILE_ATTRIBUTE_DIRECTORY, FILE_ATTRIBUTE_READONLY, FILE_ATTRIBUTE_REPARSE_POINT, FILE_FLAG_BACKUP_SEMANTICS, FILE_FLAG_OPEN_REPARSE_POINT, FILE_NAME_NORMALIZED, GETFINALPATHNAMEBYHANDLE_FLAGS, OPEN_EXISTING};
 use windows_sys::Win32::UI::Shell::PathFileExistsW;
-use crate::get_proc_from_module;
 
+#[derive(Clone)]
 pub struct Metadata {
     attribute_data: BY_HANDLE_FILE_INFORMATION
 }
@@ -123,14 +124,13 @@ fn metadata_impl<P: AsRef<Path>>(path: P, follow_symlink: bool) -> crate::io::Re
             &mut information
         )
     };
-
     let error = get_last_windows_error();
 
     // Close the file
     unsafe { CloseHandle(file) };
 
-    if success != TRUE {
-        return Err(Error { reason: format!("unable to get file metadata: {}", get_last_windows_error()) })
+    if success == FALSE {
+        return Err(Error { reason: format!("unable to get file metadata: {error}") })
     }
 
     Ok(Metadata::new(information))
@@ -139,17 +139,17 @@ fn metadata_impl<P: AsRef<Path>>(path: P, follow_symlink: bool) -> crate::io::Re
 pub(crate) fn open_file_for_querying_metadata<P: AsRef<Path>>(path: P, follow_symlink: bool) -> crate::io::Result<HANDLE> {
     let result = unsafe {
         CreateFileW(
-            path.as_ref().encode_utf16_path_with_nul().as_ptr(),
-            GENERIC_READ,
-            FILE_SHARE_READ,
+            path.as_ref().encode_for_win32().as_ptr(),
+            0,
+            0,
             null(),
             OPEN_EXISTING,
-            if follow_symlink { FILE_FLAG_OPEN_REPARSE_POINT } else { 0 },
+            if follow_symlink { FILE_FLAG_OPEN_REPARSE_POINT } else { 0 } | FILE_FLAG_BACKUP_SEMANTICS,
             null_mut()
         )
     };
     let error = get_last_windows_error();
-    if result == null_mut() {
+    if result == INVALID_HANDLE_VALUE {
         return Err(Error { reason: format!("failed to open file for metadata: {error}") })
     }
     Ok(result)
@@ -160,7 +160,7 @@ pub fn exists<P: AsRef<Path>>(path: P) -> crate::io::Result<bool> {
 }
 
 pub(crate) fn exists_infallible<P: AsRef<Path>>(path: P) -> bool {
-    let path = path.as_ref().encode_utf16_path_with_nul();
+    let path = path.as_ref().encode_for_win32();
     unsafe { PathFileExistsW(path.as_ptr()) != FALSE }
 }
 
@@ -184,8 +184,8 @@ const CANONICALIZE: Lazy<Box<dyn Fn(&Path) -> crate::io::Result<PathBuf>>> = Laz
     }
 });
 
-fn resolve_path_modern<P: AsRef<Path>>(
-    path: P,
+fn resolve_path_modern(
+    path: &Path,
     get_final_path_name_by_handle_w: GetFinalPathNameByHandleW
 ) -> crate::io::Result<PathBuf> {
     let file = open_file_for_querying_metadata(path, false)?;
@@ -205,7 +205,7 @@ fn resolve_path_modern<P: AsRef<Path>>(
     Ok(String::from_utf16(full_data.as_slice()).expect("GetFinalPathNameByHandleW did not return UTF-16").into())
 }
 
-fn resolve_path_fallback<P: AsRef<Path>>(path: P) -> crate::io::Result<PathBuf> {
+fn resolve_path_fallback(path: &Path) -> crate::io::Result<PathBuf> {
     // Note: Does not resolve symlinks
     let path = path.as_ref();
     if path.exists() {
@@ -215,7 +215,7 @@ fn resolve_path_fallback<P: AsRef<Path>>(path: P) -> crate::io::Result<PathBuf> 
     let mut full_data = vec![0u16; 32768];
     let len = unsafe {
         GetFullPathNameW(
-            path.encode_utf16_path_with_nul().as_ptr(),
+            path.encode_for_win32().as_ptr(),
             full_data.len() as u32,
             full_data.as_mut_ptr(),
             null_mut()
@@ -223,14 +223,10 @@ fn resolve_path_fallback<P: AsRef<Path>>(path: P) -> crate::io::Result<PathBuf> 
     } as usize;
 
     if len == 0 || len > full_data.len() {
-        return Err(Error { reason: format!("failed to canonicalize path: {}", get_last_windows_error())})
+        let error = get_last_windows_error();
+        return Err(Error { reason: format!("failed to canonicalize path: {error}")})
     }
 
     full_data.truncate(len);
     Ok(String::from_utf16(full_data.as_slice()).expect("GetFullPathNameW did not return a UTF-16 path").into())
 }
-
-pub fn set_permissions<P: AsRef<Path>>(path: P, permissions: Permissions) -> crate::io::Result<()> {
-    todo!()
-}
-

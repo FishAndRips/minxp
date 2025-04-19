@@ -7,6 +7,6 @@ pub use file::*;
 mod dir;
 pub use dir::*;
 
-
 // hard_link is unimplemented
 // read_link is unimplemented
+// set_permissions is unimplemented

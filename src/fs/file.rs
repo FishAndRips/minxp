@@ -8,8 +8,8 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use core::mem::zeroed;
 use core::ptr::{null, null_mut};
-use windows_sys::Win32::Foundation::{CloseHandle, GENERIC_READ, GENERIC_WRITE, HANDLE, TRUE};
-use windows_sys::Win32::Storage::FileSystem::{CreateFileW, FlushFileBuffers, GetFileInformationByHandle, ReadFile, SetFilePointerEx, WriteFile, CREATE_ALWAYS, CREATE_NEW, FILE_APPEND_DATA, FILE_ATTRIBUTE_NORMAL, FILE_BEGIN, FILE_CURRENT, FILE_END, FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING, TRUNCATE_EXISTING};
+use windows_sys::Win32::Foundation::{CloseHandle, FALSE, GENERIC_READ, GENERIC_WRITE, HANDLE, INVALID_HANDLE_VALUE};
+use windows_sys::Win32::Storage::FileSystem::{CopyFileExW, CreateFileW, DeleteFileW, FlushFileBuffers, GetFileInformationByHandle, ReadFile, SetFilePointerEx, WriteFile, CREATE_ALWAYS, CREATE_NEW, FILE_APPEND_DATA, FILE_ATTRIBUTE_NORMAL, FILE_BEGIN, FILE_CURRENT, FILE_END, FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING, TRUNCATE_EXISTING};
 
 pub fn write<P: AsRef<Path>, C: AsRef<[u8]>>(path: P, contents: C) -> Result<()> {
     File::create(path).and_then(|mut f| f.write_all(contents.as_ref()))
@@ -26,6 +26,41 @@ pub fn read_to_string<P: AsRef<Path>>(path: P) -> Result<String> {
     read(path).and_then(|s| {
         String::from_utf8(s).map_err(|e| Error { reason: format!("cannot read_to_string due to UTF-8 parsing error: {e:?}") })
     })
+}
+
+pub fn copy<P: AsRef<Path>, Q: AsRef<Path>>(from: P, to: Q) -> Result<u64> {
+    let success = unsafe {
+        CopyFileExW(
+            from.as_ref().encode_for_win32().as_ptr(),
+            to.as_ref().encode_for_win32().as_ptr(),
+            None,
+            null(),
+            null_mut(),
+            0
+        )
+    };
+
+    if success == FALSE {
+        let error = get_last_windows_error();
+        return Err(Error { reason: format!("failed to copy: {error}") })
+    }
+
+    Ok(to.as_ref().metadata()?.len())
+}
+
+pub fn remove_file<P: AsRef<Path>>(path: P) -> Result<()> {
+    let success = unsafe {
+        DeleteFileW(
+            path.as_ref().encode_for_win32().as_ptr()
+        )
+    };
+
+    if success == FALSE {
+        let error = get_last_windows_error();
+        return Err(Error { reason: format!("failed to delete file: {error}") })
+    }
+
+    Ok(())
 }
 
 pub struct File {
@@ -52,7 +87,7 @@ impl File {
     pub fn metadata(&self) -> Result<Metadata> {
         let mut file_info = unsafe { zeroed() };
         let result = unsafe { GetFileInformationByHandle(self.handle, &mut file_info) };
-        if result != TRUE {
+        if result == FALSE {
             let error = get_last_windows_error();
             return Err(Error { reason: format!("failed to get metadata for an open file: {error}") })
         }
@@ -80,7 +115,7 @@ impl Read for File {
             null_mut()
         ) };
 
-        if success != TRUE {
+        if success == FALSE {
             let reason = get_last_windows_error();
             return Err(Error { reason: format!("failed to read file: {reason}") })
         }
@@ -129,7 +164,7 @@ impl Write for File {
                 null_mut()
             )
         };
-        if result != TRUE {
+        if result == FALSE {
             let error = get_last_windows_error();
             return Err(Error { reason: format!("failed to write to file: {error}") })
         }
@@ -140,7 +175,7 @@ impl Write for File {
         let result = unsafe {
             FlushFileBuffers(self.handle)
         };
-        if result != TRUE {
+        if result == FALSE {
             let error = get_last_windows_error();
             return Err(Error { reason: format!("failed to flush file: {error}") })
         }
@@ -173,7 +208,7 @@ impl Seek for File {
             )
         };
 
-        if success != TRUE {
+        if success == FALSE {
             let last_error = get_last_windows_error();
             return Err(Error { reason: format!("failed to seek: {last_error}") })
         };
@@ -246,7 +281,7 @@ impl OpenOptions {
 
         let handle = unsafe {
             CreateFileW(
-                path.as_ref().encode_utf16_path_with_nul().as_ptr(),
+                path.as_ref().encode_for_win32().as_ptr(),
                 desired_access,
                 share_access,
                 null(),
@@ -267,7 +302,7 @@ impl OpenOptions {
             )
         };
 
-        if handle.is_null() {
+        if handle == INVALID_HANDLE_VALUE {
             let error = get_last_windows_error();
             return Err(Error { reason: format!("cannot open file: {error}") })
         }

@@ -19,7 +19,8 @@ pub struct Vars {
 
 impl Vars {
     unsafe fn new(vars: PWSTR) -> Self {
-        assert!(!vars.is_null(), "vars is NULL: {}", get_last_windows_error());
+        let error = get_last_windows_error();
+        assert!(!vars.is_null(), "vars is NULL: {error}");
 
         let mut back_var = vars;
         loop {
@@ -134,7 +135,8 @@ pub fn set_var<K: AsRef<str>>(key: K, value: K) {
     let key_utf16: Vec<u16> = key.encode_utf16().chain(once(0)).collect();
 
     let return_value = unsafe { SetEnvironmentVariableW(key_utf16.as_ptr(), value_utf16.as_ptr()) };
-    assert_ne!(return_value, FALSE, "set_var failed: {}", get_last_windows_error());
+    let error = get_last_windows_error();
+    assert_ne!(return_value, FALSE, "set_var failed: {error}");
 }
 
 pub fn remove_var<K: AsRef<str>>(key: K) {
@@ -144,7 +146,8 @@ pub fn remove_var<K: AsRef<str>>(key: K) {
     let key_utf16: Vec<u16> = key.encode_utf16().chain(once(0)).collect();
 
     let return_value = unsafe { SetEnvironmentVariableW(key_utf16.as_ptr(), null()) };
-    assert_ne!(return_value, FALSE, "remove_var failed: {}", get_last_windows_error());
+    let error = get_last_windows_error();
+    assert_ne!(return_value, FALSE, "remove_var failed: {error}");
 }
 
 #[derive(Clone, Debug, PartialEq)]

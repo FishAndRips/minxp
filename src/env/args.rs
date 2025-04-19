@@ -14,7 +14,8 @@ pub struct Args {
 
 impl Args {
     unsafe fn new(command_line: PCWSTR) -> Self {
-        assert!(!command_line.is_null(), "command_line is NULL: {}", get_last_windows_error());
+        let err = get_last_windows_error();
+        assert!(!command_line.is_null(), "command_line is NULL: {err}");
 
         let mut argc: i32 = 0;
 
@@ -22,7 +23,8 @@ impl Args {
         let argv = unsafe { CommandLineToArgvW(command_line, &mut argc) };
         let argc = argc as usize;
 
-        assert!(!argv.is_null(), "CommandLineToArgvW was NULL: {}", get_last_windows_error());
+        let err = get_last_windows_error();
+        assert!(!argv.is_null(), "CommandLineToArgvW was NULL: {err}");
 
         Self {
             current_index_front: 0,

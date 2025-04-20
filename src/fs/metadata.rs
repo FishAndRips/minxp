@@ -9,7 +9,7 @@ use alloc::{format, vec};
 use core::mem::zeroed;
 use core::ptr::{null, null_mut};
 use spin::Lazy;
-use windows_sys::Win32::Foundation::{CloseHandle, FALSE, FILETIME, HANDLE, INVALID_HANDLE_VALUE};
+use windows_sys::Win32::Foundation::{CloseHandle, ERROR_FILE_NOT_FOUND, FALSE, FILETIME, HANDLE, INVALID_HANDLE_VALUE};
 use windows_sys::Win32::Storage::FileSystem::{CreateFileW, GetFileInformationByHandle, GetFullPathNameW, BY_HANDLE_FILE_INFORMATION, FILE_ATTRIBUTE_DIRECTORY, FILE_ATTRIBUTE_READONLY, FILE_ATTRIBUTE_REPARSE_POINT, FILE_FLAG_BACKUP_SEMANTICS, FILE_FLAG_OPEN_REPARSE_POINT, FILE_NAME_NORMALIZED, GETFINALPATHNAMEBYHANDLE_FLAGS, OPEN_EXISTING};
 use windows_sys::Win32::UI::Shell::PathFileExistsW;
 
@@ -155,8 +155,23 @@ pub(crate) fn open_file_for_querying_metadata<P: AsRef<Path>>(path: P, follow_sy
     Ok(result)
 }
 
+/// Checks if the file exists.
+///
+/// This function returns `Ok(true)` if it does, `Ok(false)` if it doesn't, and `Err()` if an error
+/// occurred.
 pub fn exists<P: AsRef<Path>>(path: P) -> crate::io::Result<bool> {
-    Ok(exists_infallible(path))
+    if exists_infallible(path) {
+        Ok(true)
+    }
+    else {
+        let error = get_last_windows_error();
+        if error == ERROR_FILE_NOT_FOUND {
+            Ok(false)
+        }
+        else {
+            Err(Error { reason: format!("unable to check if a file exists: {error}") })
+        }
+    }
 }
 
 pub(crate) fn exists_infallible<P: AsRef<Path>>(path: P) -> bool {
@@ -164,6 +179,14 @@ pub(crate) fn exists_infallible<P: AsRef<Path>>(path: P) -> bool {
     unsafe { PathFileExistsW(path.as_ptr()) != FALSE }
 }
 
+/// Resolves a path.
+///
+/// # Compatibility notes
+///
+/// - On Windows Vista or newer, this uses the `GetFinalPathNameByHandleW` function.
+/// - On Windows XP and older, this uses the `GetFullPathNameW` function. This function won't handle
+///   symlinks or validate the presence of the file, so a separate check with `PathFileExistsW` is
+///   performed to ensure that the file exists.
 pub fn canonicalize<P: AsRef<Path>>(path: P) -> crate::io::Result<PathBuf> {
     CANONICALIZE(path.as_ref())
 }
@@ -208,7 +231,7 @@ fn resolve_path_modern(
 fn resolve_path_fallback(path: &Path) -> crate::io::Result<PathBuf> {
     // Note: Does not resolve symlinks
     let path = path.as_ref();
-    if path.exists() {
+    if !path.exists() {
         return Err(Error { reason: "path does not exists".to_owned() })
     }
 

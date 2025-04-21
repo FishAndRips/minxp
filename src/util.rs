@@ -60,7 +60,6 @@ impl<S: AsRef<OsStr>> AsUtf16Nul for S {
     }
 }
 
-#[macro_export]
 macro_rules! get_proc_from_module {
     ($module:literal, $function:literal) => {{
         use windows_sys::Win32::System::LibraryLoader::{GetModuleHandleW, GetProcAddress};
@@ -88,3 +87,4 @@ macro_rules! get_proc_from_module {
     }};
 }
 
+pub(crate) use get_proc_from_module;

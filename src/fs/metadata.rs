@@ -1,4 +1,4 @@
-use crate::get_proc_from_module;
+use crate::util::get_proc_from_module;
 use crate::io::Error;
 use crate::path::{Path, PathBuf};
 use crate::util::get_last_windows_error;

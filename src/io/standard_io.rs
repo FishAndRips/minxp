@@ -1,11 +1,11 @@
+use crate::io::Write;
 use alloc::sync::Arc;
-use core::ptr::{null, null_mut};
+use core::ptr::null_mut;
 use spin::{Lazy, Mutex};
 use windows_sys::Win32::Foundation::{FALSE, HANDLE, INVALID_HANDLE_VALUE};
 use windows_sys::Win32::Globalization::CP_UTF8;
 use windows_sys::Win32::Storage::FileSystem::{FlushFileBuffers, WriteFile};
-use windows_sys::Win32::System::Console::{GetConsoleMode, GetStdHandle, SetConsoleCP, SetConsoleOutputCP, WriteConsoleA, STD_ERROR_HANDLE, STD_OUTPUT_HANDLE};
-use crate::io::Write;
+use windows_sys::Win32::System::Console::{GetConsoleMode, GetStdHandle, SetConsoleCP, SetConsoleOutputCP, STD_ERROR_HANDLE, STD_OUTPUT_HANDLE};
 
 fn enable_utf8() {
     // for input
@@ -62,24 +62,13 @@ macro_rules! impl_stdout {
                     for i in buf.chunks(u32::MAX as usize) {
                         let mut written = 0u32;
                         let success = unsafe {
-                            if self.is_console {
-                                WriteConsoleA(
-                                    *n,
-                                    i.as_ptr(),
-                                    i.len() as u32,
-                                    &mut written,
-                                    null()
-                                )
-                            }
-                            else {
-                                WriteFile(
-                                    *n,
-                                    i.as_ptr(),
-                                    i.len() as u32,
-                                    &mut written,
-                                    null_mut()
-                                )
-                            }
+                            WriteFile(
+                                *n,
+                                i.as_ptr(),
+                                i.len() as u32,
+                                &mut written,
+                                null_mut()
+                            )
                         };
                         if success == FALSE {
                             break;
@@ -91,7 +80,7 @@ macro_rules! impl_stdout {
                     Ok(written_total)
                 }
                 else {
-                    Ok(buf.len())
+                    Ok(0)
                 }
             }
             fn write_all(&mut self, buf: &[u8]) -> crate::io::Result<()> {

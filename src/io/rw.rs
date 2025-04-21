@@ -1,5 +1,6 @@
 use alloc::vec::Vec;
-use super::Result;
+use core::fmt::Arguments;
+use super::{Error, Result};
 
 pub trait Write {
     fn write(&mut self, buf: &[u8]) -> Result<usize>;
@@ -12,6 +13,23 @@ pub trait Write {
             b = &b[bytes_written..];
         }
         Ok(())
+    }
+
+    fn write_fmt(&mut self, fmt: Arguments<'_>) -> Result<()> {
+        struct FmtWriter<'a, W: Write + ?Sized> {
+            something: &'a mut W
+        }
+
+        impl<'a, W: Write + ?Sized> core::fmt::Write for FmtWriter<'a, W> {
+            fn write_str(&mut self, s: &str) -> core::fmt::Result {
+                // write_fmt internally uses write_all
+                let _ = self.something.write_all(s.as_bytes());
+                Ok(())
+            }
+        }
+
+        core::fmt::write(&mut FmtWriter { something: self }, fmt)
+            .map_err(|e| Error { reason: alloc::format!("write_fmt error: {e}") })
     }
 }
 

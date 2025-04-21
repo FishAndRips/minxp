@@ -58,12 +58,6 @@ macro_rules! impl_stdout {
             }
         }
 
-        impl core::fmt::Write for $type {
-            fn write_str(&mut self, s: &str) -> core::fmt::Result {
-                self.lock().write_str(s)
-            }
-        }
-
         unsafe impl Sync for $type {}
         unsafe impl Send for $type {}
 
@@ -80,13 +74,6 @@ macro_rules! impl_stdout {
             }
             fn flush(&mut self) -> crate::io::Result<()> {
                 self.guard.flush()
-            }
-        }
-
-        impl core::fmt::Write for $type_lock<'_> {
-            fn write_str(&mut self, s: &str) -> core::fmt::Result {
-                let _ = crate::io::Write::write_all(self, s.as_bytes());
-                Ok(())
             }
         }
     };

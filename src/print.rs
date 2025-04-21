@@ -10,7 +10,7 @@ macro_rules! println {
         $crate::print!("\n")
     }};
     ($($arg:tt)*) => {{
-        let _ = core::fmt::Write::write_fmt(&mut $crate::io::stdout(), format_args!($($arg)*));
+        let _ = $crate::io::Write::write_fmt(&mut $crate::io::stdout(), format_args!($($arg)*));
         $crate::println!();
     }};
 }
@@ -26,7 +26,7 @@ macro_rules! eprintln {
         $crate::eprint!("\n")
     }};
     ($($arg:tt)*) => {{
-        let _ = core::fmt::Write::write_fmt(&mut $crate::io::stderr(), format_args!($($arg)*));
+        let _ = $crate::io::Write::write_fmt(&mut $crate::io::stderr(), format_args!($($arg)*));
         $crate::eprintln!();
     }};
 }

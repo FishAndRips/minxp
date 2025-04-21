@@ -2,6 +2,9 @@
 name = "minxp"
 version = "0.1.0"
 edition = "2024"
+repository = "https://github.com/FishAndRips/minxp"
+license = "GPL-3.0-only"
+readme = "README.md"
 
 [dependencies]
 spin = "0.10.0"

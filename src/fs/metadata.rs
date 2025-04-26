@@ -1,6 +1,6 @@
 use crate::util::get_proc_from_module;
 use crate::io::Error;
-use crate::path::{Path, PathBuf};
+use crate::path::{Path, PathBuf, MAX_PATH_EXTENDED};
 use crate::util::get_last_windows_error;
 use alloc::borrow::ToOwned;
 use alloc::boxed::Box;
@@ -212,7 +212,7 @@ fn resolve_path_modern(
     get_final_path_name_by_handle_w: GetFinalPathNameByHandleW
 ) -> crate::io::Result<PathBuf> {
     let file = open_file_for_querying_metadata(path, false)?;
-    let mut full_data = vec![0u16; 32768];
+    let mut full_data = vec![0u16; MAX_PATH_EXTENDED + 1];
     let q = unsafe {
         get_final_path_name_by_handle_w(file, full_data.as_mut_ptr(), full_data.len() as u32, FILE_NAME_NORMALIZED)
     };

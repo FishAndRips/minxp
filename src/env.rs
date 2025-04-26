@@ -9,12 +9,12 @@ use windows_sys::Win32::System::Environment::{GetCurrentDirectoryW, SetCurrentDi
 use windows_sys::Win32::System::LibraryLoader::GetModuleFileNameW;
 pub use args::*;
 pub use vars::*;
-use crate::path::PathBuf;
+use crate::path::{PathBuf, MAX_PATH_EXTENDED};
 use crate::io::Error;
 use crate::util::get_last_windows_error;
 
 pub fn current_exe() -> crate::io::Result<PathBuf> {
-    let mut path = vec![0u16; 32768];
+    let mut path = vec![0u16; MAX_PATH_EXTENDED + 1];
     let path_len = unsafe { GetModuleFileNameW(null_mut(), path.as_mut_ptr(), path.len() as u32) } as usize;
     let err = get_last_windows_error();
     assert_ne!(path_len, 0, "current_exe() failed: {err}");
@@ -24,7 +24,7 @@ pub fn current_exe() -> crate::io::Result<PathBuf> {
 }
 
 pub fn current_dir() -> crate::io::Result<PathBuf> {
-    let mut path = vec![0u16; 32768];
+    let mut path = vec![0u16; MAX_PATH_EXTENDED + 1];
     let path_len = unsafe { GetCurrentDirectoryW(path.len() as u32, path.as_mut_ptr()) } as usize;
     let err = get_last_windows_error();
     assert_ne!(path_len, 0, "current_exe() failed: {err}");

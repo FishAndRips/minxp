@@ -7,8 +7,7 @@ use core::ptr::null;
 use windows_sys::core::PWSTR;
 use windows_sys::Win32::Foundation::FALSE;
 use windows_sys::Win32::System::Environment::{FreeEnvironmentStringsW, GetEnvironmentStringsW, GetEnvironmentVariableW, SetEnvironmentVariableW};
-
-const MAX_ENV_VAR_VALUE_LEN: usize = 32767;
+use crate::path::MAX_PATH_EXTENDED;
 
 pub struct Vars {
     first_var: PWSTR,
@@ -108,7 +107,7 @@ pub fn var<K: AsRef<str>>(key: K) -> Result<String, VarError> {
     let key = key.as_ref();
 
     let key_utf16: Vec<u16> = key.encode_utf16().chain(once(0)).collect();
-    let mut value_utf16: Vec<u16> = Vec::with_capacity(MAX_ENV_VAR_VALUE_LEN + 1);
+    let mut value_utf16: Vec<u16> = Vec::with_capacity(MAX_PATH_EXTENDED + 1);
 
     unsafe {
         let len = GetEnvironmentVariableW(key_utf16.as_ptr(), value_utf16.as_mut_ptr(), value_utf16.capacity() as u32);
@@ -131,7 +130,7 @@ pub fn set_var<K: AsRef<str>>(key: K, value: K) {
     assert!(!value.contains('\x00'), "key cannot contain a NUL char");
 
     let value_utf16: Vec<u16> = value.encode_utf16().chain(once(0)).collect();
-    assert!(value_utf16.len() < MAX_ENV_VAR_VALUE_LEN, "value exceeds MAX_ENV_VAR_VALUE_LEN codepoints");
+    assert!(value_utf16.len() < MAX_PATH_EXTENDED, "value exceeds MAX_ENV_VAR_VALUE_LEN codepoints");
     let key_utf16: Vec<u16> = key.encode_utf16().chain(once(0)).collect();
 
     let return_value = unsafe { SetEnvironmentVariableW(key_utf16.as_ptr(), value_utf16.as_ptr()) };

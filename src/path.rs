@@ -18,7 +18,12 @@ pub fn is_separator(c: char) -> bool {
 
 pub const MAIN_SEPARATOR: char = '\\';
 pub const MAIN_SEPARATOR_STR: &str = "\\";
+
+/// Base max path
 pub(crate) const MAX_PATH: usize = windows_sys::Win32::Foundation::MAX_PATH as usize;
+
+/// Extended max path
+pub(crate) const MAX_PATH_EXTENDED: usize = 32767 as usize;
 
 #[derive(Clone, PartialEq)]
 #[repr(transparent)]

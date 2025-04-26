@@ -1,5 +1,5 @@
 use crate::ffi::OsString;
-use crate::fs::Metadata;
+use crate::fs::{absolute, Metadata};
 use crate::io::Error;
 use crate::io::Result;
 use crate::path::{Path, PathBuf, MAIN_SEPARATOR};
@@ -73,7 +73,7 @@ pub fn read_dir<P: AsRef<Path>>(path: P) -> Result<ReadDir> {
 pub fn remove_dir<P: AsRef<Path>>(path: P) -> Result<()> {
     let success = unsafe {
         RemoveDirectoryW(
-            path.as_ref().encode_for_win32().as_ptr()
+            absolute(path.as_ref())?.encode_for_win32().as_ptr()
         )
     };
 
@@ -86,12 +86,14 @@ pub fn remove_dir<P: AsRef<Path>>(path: P) -> Result<()> {
 }
 
 pub fn remove_dir_all<P: AsRef<Path>>(path: P) -> Result<()> {
-    if !path.as_ref().is_dir() {
+    let path = path.as_ref();
+    if !path.is_dir() {
         return Err(Error { reason: "cannot remove all dir: not a directory".to_string() })
     }
+    let path = absolute(path.as_ref())?;
 
     let mut op: SHFILEOPSTRUCTW = unsafe { zeroed() };
-    let mut path_data = path.as_ref().encode_for_win32();
+    let mut path_data = path.encode_for_win32();
     let mut path_data_2 = path_data.clone();
 
     // Remove the null terminator, and add `\*` to the end to remove everything inside the dir.

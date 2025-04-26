@@ -179,16 +179,46 @@ pub(crate) fn exists_infallible<P: AsRef<Path>>(path: P) -> bool {
     unsafe { PathFileExistsW(path.as_ptr()) != FALSE }
 }
 
-/// Resolves a path.
+/// Resolves a path to its actual, absolute path, with all symlinks resolved.
 ///
 /// # Compatibility notes
 ///
-/// - On Windows Vista or newer, this uses the `GetFinalPathNameByHandleW` function.
-/// - On Windows XP and older, this uses the `GetFullPathNameW` function. This function won't handle
-///   symlinks or validate the presence of the file, so a separate check with `PathFileExistsW` is
-///   performed to ensure that the file exists.
+/// - On Windows Vista or newer, this uses the `GetFinalPathNameByHandleW` function, which also
+///   resolves symlinks.
+/// - On Windows XP and older, this will just return the absolute path with an additional check for
+///   if the path exists.
 pub fn canonicalize<P: AsRef<Path>>(path: P) -> crate::io::Result<PathBuf> {
     CANONICALIZE(path.as_ref())
+}
+
+/// Convert the path to its absolute form.
+///
+/// If the path is already absolute, this simply returns the path as a PathBuf. Otherwise, this uses
+/// the `GetFullPathNameW` function to get a full path.
+pub fn absolute<P: AsRef<Path>>(path: P) -> crate::io::Result<PathBuf> {
+    let path = path.as_ref();
+
+    if path.is_absolute() {
+        return Ok(path.to_owned());
+    }
+
+    let mut full_data = vec![0u16; MAX_PATH_EXTENDED + 1];
+    let len = unsafe {
+        GetFullPathNameW(
+            path.encode_for_win32().as_ptr(),
+            full_data.len() as u32,
+            full_data.as_mut_ptr(),
+            null_mut()
+        )
+    } as usize;
+
+    if len == 0 || len > full_data.len() {
+        let error = get_last_windows_error();
+        return Err(Error { reason: format!("failed to get absolute path: {error}")})
+    }
+
+    full_data.truncate(len);
+    Ok(String::from_utf16(full_data.as_slice()).expect("GetFullPathNameW did not return a UTF-16 path").into())
 }
 
 type GetFinalPathNameByHandleW = unsafe extern "system" fn (HANDLE, windows_sys::core::PWSTR, u32, GETFINALPATHNAMEBYHANDLE_FLAGS) -> u32;
@@ -229,27 +259,10 @@ fn resolve_path_modern(
 }
 
 fn resolve_path_fallback(path: &Path) -> crate::io::Result<PathBuf> {
-    // Note: Does not resolve symlinks
+    // Check if it exists. If so, get the absolute path
     let path = path.as_ref();
     if !path.exists() {
         return Err(Error { reason: "path does not exists".to_owned() })
     }
-
-    let mut full_data = vec![0u16; 32768];
-    let len = unsafe {
-        GetFullPathNameW(
-            path.encode_for_win32().as_ptr(),
-            full_data.len() as u32,
-            full_data.as_mut_ptr(),
-            null_mut()
-        )
-    } as usize;
-
-    if len == 0 || len > full_data.len() {
-        let error = get_last_windows_error();
-        return Err(Error { reason: format!("failed to canonicalize path: {error}")})
-    }
-
-    full_data.truncate(len);
-    Ok(String::from_utf16(full_data.as_slice()).expect("GetFullPathNameW did not return a UTF-16 path").into())
+    absolute(path)
 }

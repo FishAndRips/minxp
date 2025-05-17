@@ -58,11 +58,11 @@ The following modules are provided:
 
 | Module | Coverage* | Notes                                                 |
 |--------|-----------|-------------------------------------------------------|
-| `env`  | ~90%      | WIP                                                   |
-| `ffi`  | ~80%      | Only `OsStr` & `OsString`; `core::ffi` has the rest   |
+| `env`  | Full      | As of 1.87.0                                          |
+| `ffi`  |           | Only `OsStr` & `OsString`; `core::ffi` has the rest   |
 | `fs`   | ~80%      | Some functions not implemented; uses raw timestamps   |
 | `io`   | ~30%      | Partial impl of `Read`, `Write`, `Stdout`, & `Stderr` |
-| `path` | 100%      |                                                       |
+| `path` | Full      | As of 1.87.0                                          |
 
 \* Only includes what's exclusively in `std`; types in `alloc` and `core` will
    not be (re-)implemented, as there is no need

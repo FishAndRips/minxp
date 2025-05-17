@@ -1,6 +1,7 @@
 mod args;
 mod vars;
 mod path;
+pub mod consts;
 
 use crate::io::Error;
 use crate::path::{PathBuf, MAX_PATH_EXTENDED};

@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## [0.1.2] - 2025-05-17
 ### Added
 - `env::consts`
 - `env::args::os`
@@ -13,6 +13,8 @@
 ### Changed
 - Added links to mentioned Win32 functions on the official Windows App Development documentation.
 
+[0.1.2]: https://github.com/FishAndRips/minxp/releases/tag/0.1.2
+
 ## [0.1.1] - 2025-04-26
 ### Added
 - `fs::absolute`, which calls `GetFullPathNameW` on all versions of Windows and does nothing if the path is already
@@ -24,7 +26,7 @@
   still mostly the same, as it still calls `GetFullPathNameW`, with the difference being that already-absolute paths are
   returned without running `GetFullPathNameW`. This is not considered a breaking change.
 
-[0.1.1]: https://github.com/FishAndRips/minxp/commit/2ec73a6184a8b9f736ddf58cbd2b483df629f7cd
+[0.1.1]: https://github.com/FishAndRips/minxp/releases/tag/0.1.1
 
 ## [0.1.0] - 2025-04-22
 ### Added
@@ -36,4 +38,4 @@
   - io (~30%)
   - path (100%)
 
-[0.1.0]: https://github.com/FishAndRips/minxp/commit/531431ea98433689a5c4aa3229a298b713d52902
+[0.1.0]: https://github.com/FishAndRips/minxp/releases/tag/0.1.0

@@ -90,7 +90,7 @@ pub fn remove_dir_all<P: AsRef<Path>>(path: P) -> Result<()> {
     if !path.is_dir() {
         return Err(Error { reason: "cannot remove all dir: not a directory".to_string() })
     }
-    let path = absolute(path.as_ref())?;
+    let path = absolute(path)?;
 
     let mut op: SHFILEOPSTRUCTW = unsafe { zeroed() };
     let mut path_data = path.encode_for_win32();

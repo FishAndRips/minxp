@@ -58,14 +58,18 @@ The following modules are provided:
 
 | Module | Coverage* | Notes                                                 |
 |--------|-----------|-------------------------------------------------------|
-| `env`  | Full      | As of 1.87.0                                          |
-| `ffi`  |           | Only `OsStr` & `OsString`; `core::ffi` has the rest   |
-| `fs`   | ~80%      | Some functions not implemented; uses raw timestamps   |
-| `io`   | ~30%      | Partial impl of `Read`, `Write`, `Stdout`, & `Stderr` |
-| `path` | Full      | As of 1.87.0                                          |
+| `env`  | Full      |                                                       |
+| `ffi`  | Partial   | Missing some trait impls, `Component`                 |
+| `fs`   | Partial   | Some functions not implemented; uses raw timestamps   |
+| `io`   | Partial   | Partial impl of `Read`, `Write`, `Stdout`, & `Stderr` |
+| `path` | Partial   | Missing some trait impls                              |
 
 \* Only includes what's exclusively in `std`; types in `alloc` and `core` will
-   not be (re-)implemented, as there is no need
+   not be (re-)implemented, as there is no need. If something is missing, try
+   looking in there, first.
+
+Note that Rust's Standard Library may eventually have more things in it. As
+such, this is only guaranteed to be accurate as of **1.87.0**.
 
 ## Planned
 

@@ -3,7 +3,9 @@ use alloc::boxed::Box;
 use crate::ffi::{OsStr, OsString};
 use crate::fs::*;
 use alloc::collections::TryReserveError;
+use alloc::rc::Rc;
 use alloc::string::String;
+use alloc::sync::Arc;
 use alloc::vec;
 use alloc::vec::Vec;
 use core::borrow::Borrow;
@@ -25,7 +27,7 @@ pub(crate) const MAX_PATH: usize = windows_sys::Win32::Foundation::MAX_PATH as u
 /// Extended max path
 pub(crate) const MAX_PATH_EXTENDED: usize = 32767 as usize;
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Ord, PartialOrd, Eq)]
 #[repr(transparent)]
 pub struct PathBuf {
     data: OsString
@@ -148,7 +150,7 @@ impl PathBuf {
     }
 }
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Eq, PartialOrd, Ord)]
 #[repr(transparent)]
 pub struct Path {
     inner: OsStr
@@ -668,6 +670,81 @@ impl<'a> Iterator for Ancestors<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         self.path = self.path.parent()?;
         Some(self.path)
+    }
+}
+
+impl From<&Path> for Arc<Path> {
+    fn from(value: &Path) -> Self {
+        value.to_path_buf().into_boxed_path().into()
+    }
+}
+
+impl From<&Path> for Box<Path> {
+    fn from(value: &Path) -> Self {
+        value.to_path_buf().into_boxed_path()
+    }
+}
+
+impl From<&Path> for Rc<Path> {
+    fn from(value: &Path) -> Self {
+        value.to_path_buf().into_boxed_path().into()
+    }
+}
+
+impl<'a> From<&'a Path> for Cow<'a, Path> {
+    fn from(value: &'a Path) -> Self {
+        Cow::Borrowed(value)
+    }
+}
+
+impl From<&mut Path> for Arc<Path> {
+    fn from(value: &mut Path) -> Self {
+        Arc::from(&*value)
+    }
+}
+
+impl From<&mut Path> for Box<Path> {
+    fn from(value: &mut Path) -> Self {
+        Box::from(&*value)
+    }
+}
+
+impl From<&mut Path> for Rc<Path> {
+    fn from(value: &mut Path) -> Self {
+        Rc::from(&*value)
+    }
+}
+
+impl AsRef<OsStr> for Path {
+    fn as_ref(&self) -> &OsStr {
+        self.as_os_str()
+    }
+}
+
+impl From<Cow<'_, Path>> for Box<Path> {
+    fn from(value: Cow<'_, Path>) -> Self {
+        match value {
+            Cow::Borrowed(p) => p.to_path_buf().into_boxed_path(),
+            Cow::Owned(p) => p.into_boxed_path()
+        }
+    }
+}
+
+impl Clone for Box<Path> {
+    fn clone(&self) -> Self {
+        self.to_path_buf().into_boxed_path()
+    }
+}
+
+impl AsRef<Path> for Components<'_> {
+    fn as_ref(&self) -> &Path {
+        self.iter.as_path()
+    }
+}
+
+impl From<PathBuf> for Box<Path> {
+    fn from(value: PathBuf) -> Self {
+        value.into_boxed_path()
     }
 }
 

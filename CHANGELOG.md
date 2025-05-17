@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.1.3] - 2025-05-17
+0.1.2 was tagged prematurely and was missing some things introduced in 1.87.0.
+
+### Added
+- `ffi::OsStr::display` (`std` 1.87.0)
+- `ffi::OsString::display` (`std` 1.87.0)
+- Some missing trait impls for Path
+
+### Fixed
+- Readme regarding coverage
+
+[0.1.3]: https://github.com/FishAndRips/minxp/releases/tag/0.1.3
+
 ## [0.1.2] - 2025-05-17
 ### Added
 - `env::consts`
@@ -32,10 +45,10 @@
 ### Added
 - Initial release
 - Increased coverage (ignoring non-core/alloc):
-  - env (~80%, was incorrectly marked as 100%)
-  - ffi (~80%)
-  - fs (~80%)
-  - io (~30%)
-  - path (100%)
+  - env (Partial, was incorrectly marked as Full)
+  - ffi (Partial)
+  - fs (Partial)
+  - io (Partial)
+  - path (Partial, was incorrectly marked as Full)
 
 [0.1.0]: https://github.com/FishAndRips/minxp/releases/tag/0.1.0

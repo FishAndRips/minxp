@@ -2,9 +2,10 @@ use alloc::borrow::{Cow, ToOwned};
 use alloc::boxed::Box;
 use alloc::collections::TryReserveError;
 use alloc::string::{String, ToString};
+use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::borrow::Borrow;
-use core::fmt::{Debug, Formatter};
+use core::fmt::{Debug, Display, Formatter};
 use core::ops::Deref;
 use core::str::FromStr;
 
@@ -12,7 +13,7 @@ use core::str::FromStr;
 ///
 /// This is not guaranteed to have the same binary representation as Rust's standard library even on
 /// Windows.
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Ord, PartialOrd, Eq)]
 #[repr(transparent)]
 pub struct OsString {
     string: String
@@ -126,7 +127,7 @@ impl FromStr for OsString {
 }
 
 #[repr(transparent)]
-#[derive(PartialEq)]
+#[derive(PartialEq, Eq, PartialOrd, Ord)]
 pub struct OsStr {
     inner: str
 }
@@ -197,6 +198,10 @@ impl OsStr {
 
     pub fn is_ascii(&self) -> bool {
         self.inner.is_ascii()
+    }
+
+    pub fn display(&self) -> impl Display {
+        self.as_str()
     }
 
     pub fn eq_ignore_ascii_case<S: AsRef<OsStr>>(&self, other: S) -> bool {
@@ -279,5 +284,17 @@ impl PartialEq<str> for OsStr {
 impl PartialEq<OsStr> for str {
     fn eq(&self, other: &OsStr) -> bool {
         self == other.as_str()
+    }
+}
+
+impl From<&OsStr> for Arc<OsStr> {
+    fn from(value: &OsStr) -> Self {
+        value.to_os_string().into_boxed_os_str().into()
+    }
+}
+
+impl From<&mut OsStr> for Arc<OsStr> {
+    fn from(value: &mut OsStr) -> Self {
+        Arc::from(&*value)
     }
 }

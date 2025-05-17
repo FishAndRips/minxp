@@ -264,7 +264,6 @@ fn resolve_path_modern(
 
 fn resolve_path_fallback(path: &Path) -> crate::io::Result<PathBuf> {
     // Check if it exists. If so, get the absolute path
-    let path = path.as_ref();
     if !path.exists() {
         return Err(Error { reason: "path does not exists".to_owned() })
     }

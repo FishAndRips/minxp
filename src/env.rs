@@ -1,17 +1,26 @@
 mod args;
 mod vars;
-use alloc::{format, vec};
+mod path;
+
+use crate::io::Error;
+use crate::path::{PathBuf, MAX_PATH_EXTENDED};
+use crate::util::{get_last_windows_error, get_proc_from_module};
 use alloc::string::String;
 use alloc::vec::Vec;
+use alloc::{format, vec};
 use core::iter::once;
 use core::ptr::null_mut;
+use spin::Lazy;
+use windows_sys::Win32::Foundation::{CloseHandle, FALSE};
+use windows_sys::Win32::Security::TOKEN_QUERY;
+use windows_sys::Win32::Storage::FileSystem::GetTempPathW;
 use windows_sys::Win32::System::Environment::{GetCurrentDirectoryW, SetCurrentDirectoryW};
 use windows_sys::Win32::System::LibraryLoader::GetModuleFileNameW;
+use windows_sys::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
+use windows_sys::Win32::UI::Shell::GetUserProfileDirectoryW;
 pub use args::*;
 pub use vars::*;
-use crate::path::{PathBuf, MAX_PATH_EXTENDED};
-use crate::io::Error;
-use crate::util::get_last_windows_error;
+pub use path::*;
 
 pub fn current_exe() -> crate::io::Result<PathBuf> {
     let mut path = vec![0u16; MAX_PATH_EXTENDED + 1];
@@ -33,6 +42,34 @@ pub fn current_dir() -> crate::io::Result<PathBuf> {
     Ok(data.into())
 }
 
+pub fn home_dir() -> Option<PathBuf> {
+    if let Ok(v) = var("USERPROFILE") {
+        return Some(v.into())
+    };
+
+    let mut data = vec![0u16; MAX_PATH_EXTENDED + 1];
+    let handle = unsafe { GetCurrentProcess() };
+    let mut token_handle = null_mut();
+    let token = unsafe { OpenProcessToken(handle, TOKEN_QUERY, &mut token_handle) };
+
+    if token == FALSE {
+        return None
+    }
+
+    unsafe {
+        let mut len = data.len() as u32;
+        let success = GetUserProfileDirectoryW(token_handle, data.as_mut_ptr(), &mut len);
+        let err = get_last_windows_error();
+        CloseHandle(token_handle);
+        if success == FALSE {
+            return None
+        }
+    }
+
+    let null = data.iter().position(|s| *s == 0).unwrap_or(data.len());
+    String::from_utf16(&data[..null]).ok().map(Into::into)
+}
+
 pub fn set_current_dir<P: AsRef<str>>(path: P) -> crate::io::Result<()> {
     let path: Vec<u16> = path.as_ref().encode_utf16().chain(once(0)).collect();
     let success = unsafe { SetCurrentDirectoryW(path.as_ptr()) };
@@ -43,3 +80,25 @@ pub fn set_current_dir<P: AsRef<str>>(path: P) -> crate::io::Result<()> {
     }
 }
 
+type GetTempPathWFn = unsafe extern "system" fn (len: u32, *mut u16) -> u32;
+
+static GET_TEMP_PATH: Lazy<GetTempPathWFn> = Lazy::new(|| {
+    let get_temp_path: Option<GetTempPathWFn> = get_proc_from_module!(
+        "kernel32.dll",
+        "GetTempPath2W"
+    );
+
+    match get_temp_path {
+        Some(t) => t,
+        None => GetTempPathW
+    }
+});
+
+pub fn temp_dir() -> PathBuf {
+    let mut buffer = vec![0u16; MAX_PATH_EXTENDED + 1];
+    let length = unsafe { GET_TEMP_PATH(buffer.len() as u32, buffer.as_mut_ptr()) };
+    buffer.truncate(length as usize);
+
+    let data = String::from_utf16(&buffer[..length as usize]).expect("GetTempPath(2)W returned non UTF-16");
+    data.into()
+}

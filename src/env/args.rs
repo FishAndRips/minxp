@@ -3,84 +3,101 @@ use windows_sys::core::{PCWSTR, PWSTR};
 use windows_sys::Win32::Foundation::LocalFree;
 use windows_sys::Win32::System::Environment::GetCommandLineW;
 use windows_sys::Win32::UI::Shell::CommandLineToArgvW;
+use crate::ffi::OsString;
 use crate::util::{get_last_windows_error, utf16_ptr_to_slice};
 
-pub struct Args {
-    argv: *mut PWSTR,
-    argc: usize,
-    current_index_front: usize,
-    current_index_back: usize
+macro_rules! make_args_iterator {
+    ($name:tt, $string:ty) => {
+        pub struct $name {
+            argv: *mut PWSTR,
+            argc: usize,
+            current_index_front: usize,
+            current_index_back: usize
+        }
+
+        impl $name {
+            unsafe fn new(command_line: PCWSTR) -> Self {
+                let err = get_last_windows_error();
+                assert!(!command_line.is_null(), "command_line is NULL: {err}");
+
+                let mut argc: i32 = 0;
+
+                // Safety: This string should be from GetCommandLineW
+                let argv = unsafe { CommandLineToArgvW(command_line, &mut argc) };
+                let argc = argc as usize;
+
+                let err = get_last_windows_error();
+                assert!(!argv.is_null(), "CommandLineToArgvW was NULL: {err}");
+
+                Self {
+                    current_index_front: 0,
+                    current_index_back: argc,
+                    argc,
+                    argv
+                }
+            }
+            fn get(&self, index: usize) -> $string {
+                assert!(index < self.argc);
+                unsafe {
+                    let argument: *const u16 = *self.argv.wrapping_add(index);
+
+                    // Safety: This is from CommandLineToArgvW, and we're within `argc`
+                    String::from_utf16(utf16_ptr_to_slice(argument)).expect("non-utf16 string gotten").into()
+                }
+            }
+        }
+
+        impl Iterator for $name {
+            type Item = $string;
+            fn next(&mut self) -> Option<Self::Item> {
+                if self.current_index_front < self.argc {
+                    let arg = self.get(self.current_index_front);
+                    self.current_index_front += 1;
+                    Some(arg)
+                }
+                else {
+                    None
+                }
+            }
+        }
+
+        impl DoubleEndedIterator for $name {
+            fn next_back(&mut self) -> Option<Self::Item> {
+                if self.current_index_back > 0 {
+                    self.current_index_back -= 1;
+                    let arg = self.get(self.current_index_back);
+                    Some(arg)
+                }
+                else {
+                    None
+                }
+            }
+        }
+
+        impl Drop for $name {
+            fn drop(&mut self) {
+                unsafe {
+                    LocalFree(self.argv as _);
+                }
+            }
+        }
+
+    };
 }
 
-impl Args {
-    unsafe fn new(command_line: PCWSTR) -> Self {
-        let err = get_last_windows_error();
-        assert!(!command_line.is_null(), "command_line is NULL: {err}");
-
-        let mut argc: i32 = 0;
-
-        // Safety: This string should be from GetCommandLineW
-        let argv = unsafe { CommandLineToArgvW(command_line, &mut argc) };
-        let argc = argc as usize;
-
-        let err = get_last_windows_error();
-        assert!(!argv.is_null(), "CommandLineToArgvW was NULL: {err}");
-
-        Self {
-            current_index_front: 0,
-            current_index_back: argc,
-            argc,
-            argv
-        }
-    }
-    fn get(&self, index: usize) -> String {
-        assert!(index < self.argc);
-        unsafe {
-            let argument: *const u16 = *self.argv.wrapping_add(index);
-
-            // Safety: This is from CommandLineToArgvW, and we're within `argc`
-            String::from_utf16(utf16_ptr_to_slice(argument)).expect("non-utf16 string gotten")
-        }
-    }
-}
-
-impl Iterator for Args {
-    type Item = String;
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.current_index_front < self.argc {
-            let arg = self.get(self.current_index_front);
-            self.current_index_front += 1;
-            Some(arg)
-        }
-        else {
-            None
-        }
-    }
-}
-
-impl DoubleEndedIterator for Args {
-    fn next_back(&mut self) -> Option<Self::Item> {
-        if self.current_index_back > 0 {
-            self.current_index_back -= 1;
-            let arg = self.get(self.current_index_back);
-            Some(arg)
-        }
-        else {
-            None
-        }
-    }
-}
-
-impl Drop for Args {
-    fn drop(&mut self) {
-        unsafe {
-            LocalFree(self.argv as _);
-        }
-    }
-}
+make_args_iterator!(Args, String);
 
 pub fn args() -> Args {
     unsafe {
         Args::new(GetCommandLineW())
+    }
+}
+
+
+make_args_iterator!(ArgsOs, OsString);
+
+pub fn args_os() -> ArgsOs {
+    unsafe {
+        ArgsOs::new(GetCommandLineW())
     }
 }

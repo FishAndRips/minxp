@@ -7,37 +7,92 @@ use core::ptr::null;
 use windows_sys::core::PWSTR;
 use windows_sys::Win32::Foundation::FALSE;
 use windows_sys::Win32::System::Environment::{FreeEnvironmentStringsW, GetEnvironmentStringsW, GetEnvironmentVariableW, SetEnvironmentVariableW};
+use crate::ffi::{OsStr, OsString};
 use crate::path::MAX_PATH_EXTENDED;
 
-pub struct Vars {
-    first_var: PWSTR,
-
-    front_var: PWSTR,
-    back_var: PWSTR
-}
-
-impl Vars {
-    unsafe fn new(vars: PWSTR) -> Self {
-        let error = get_last_windows_error();
-        assert!(!vars.is_null(), "vars is NULL: {error}");
-
-        let mut back_var = vars;
-        loop {
-            // SAFETY: vars is from GetEnvironmentStringsW
-            let len = unsafe { strlen_w(back_var) };
-            if len == 0 {
-                break;
-            }
-            back_var = back_var.wrapping_add(len + 1);
-        };
-
-        Self {
-            first_var: vars,
-            front_var: vars,
-            back_var
+macro_rules! make_vars_iterator {
+    ($name:tt, $string:ty, $conv:tt) => {
+        pub struct $name {
+            first_var: PWSTR,
+            front_var: PWSTR,
+            back_var: PWSTR
         }
-    }
+
+        impl $name {
+            unsafe fn new(vars: PWSTR) -> Self {
+                let error = get_last_windows_error();
+                assert!(!vars.is_null(), "vars is NULL: {error}");
+
+                let mut back_var = vars;
+                loop {
+                    // SAFETY: vars is from GetEnvironmentStringsW
+                    let len = unsafe { strlen_w(back_var) };
+                    if len == 0 {
+                        break;
+                    }
+                    back_var = back_var.wrapping_add(len + 1);
+                };
+
+                Self {
+                    first_var: vars,
+                    front_var: vars,
+                    back_var
+                }
+            }
+        }
+
+        impl Iterator for $name {
+            type Item = ($string, $string);
+            fn next(&mut self) -> Option<Self::Item> {
+                // Check if we hit the last variable
+                if unsafe { *self.front_var == 0 } {
+                    return None
+                }
+
+                let slice = unsafe {
+                    utf16_ptr_to_slice(self.front_var)
+                };
+
+                self.front_var = self.front_var.wrapping_add(slice.len() + 1);
+                Some($conv(slice))
+            }
+        }
+
+        impl DoubleEndedIterator for $name {
+            fn next_back(&mut self) -> Option<Self::Item> {
+                if self.back_var == self.front_var {
+                    return None
+                }
+
+                self.back_var = self.back_var.wrapping_sub(1);
+                while self.back_var > self.front_var {
+                    let previous_character = self.back_var.wrapping_sub(1);
+                    if unsafe { *previous_character == 0 } {
+                        break
+                    }
+                    self.back_var = previous_character;
+                }
+
+                let slice = unsafe {
+                    utf16_ptr_to_slice(self.back_var)
+                };
+
+                Some($conv(slice))
+            }
+        }
+
+        impl Drop for $name {
+            fn drop(&mut self) {
+                unsafe {
+                    FreeEnvironmentStringsW(self.first_var);
+                }
+            }
+        }
+    };
 }
+
+make_vars_iterator!(Vars, String, keyval);
+make_vars_iterator!(VarsOs, OsString, keyval_os);
 
 fn keyval(what: &[u16]) -> (String, String) {
     let mut string = String::from_utf16(what).expect("key=value not valid UTF-16");
@@ -49,57 +104,20 @@ fn keyval(what: &[u16]) -> (String, String) {
     (string, value)
 }
 
-impl Iterator for Vars {
-    type Item = (String, String);
-    fn next(&mut self) -> Option<Self::Item> {
-        // Check if we hit the last variable
-        if unsafe { *self.front_var == 0 } {
-            return None
-        }
-
-        let slice = unsafe {
-            utf16_ptr_to_slice(self.front_var)
-        };
-
-        self.front_var = self.front_var.wrapping_add(slice.len() + 1);
-        Some(keyval(slice))
-    }
-}
-
-impl DoubleEndedIterator for Vars {
-    fn next_back(&mut self) -> Option<Self::Item> {
-        if self.back_var == self.front_var {
-            return None
-        }
-
-        self.back_var = self.back_var.wrapping_sub(1);
-        while self.back_var > self.front_var {
-            let previous_character = self.back_var.wrapping_sub(1);
-            if unsafe { *previous_character == 0 } {
-                break
-            }
-            self.back_var = previous_character;
-        }
-
-        let slice = unsafe {
-            utf16_ptr_to_slice(self.back_var)
-        };
-
-        Some(keyval(slice))
-    }
-}
-
-impl Drop for Vars {
-    fn drop(&mut self) {
-        unsafe {
-            FreeEnvironmentStringsW(self.first_var);
-        }
-    }
+fn keyval_os(what: &[u16]) -> (OsString, OsString) {
+    let (key, value) = keyval(what);
+    (key.into(), value.into())
 }
 
 pub fn vars() -> Vars {
     unsafe {
         Vars::new(GetEnvironmentStringsW())
+    }
+}
+
+pub fn vars_os() -> VarsOs {
+    unsafe {
+        VarsOs::new(GetEnvironmentStringsW())
     }
 }
 
@@ -120,6 +138,12 @@ pub fn var<K: AsRef<str>>(key: K) -> Result<String, VarError> {
     }
 
     Ok(String::from_utf16(&value_utf16).expect("environment variable not utf-16"))
+}
+
+pub fn var_os<K: AsRef<OsStr>>(key: K) -> Result<String, VarError> {
+    let key = key.as_ref().to_str().expect("OsString somehow not valid UTF-8...");
+    let v = var(key)?;
+    Ok(v.into())
 }
 
 pub fn set_var<K: AsRef<str>>(key: K, value: K) {

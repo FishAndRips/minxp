@@ -58,7 +58,7 @@ The following modules are provided:
 
 | Module | Coverage* | Notes                                                 |
 |--------|-----------|-------------------------------------------------------|
-| `env`  | 100%      |                                                       |
+| `env`  | ~90%      | WIP                                                   |
 | `ffi`  | ~80%      | Only `OsStr` & `OsString`; `core::ffi` has the rest   |
 | `fs`   | ~80%      | Some functions not implemented; uses raw timestamps   |
 | `io`   | ~30%      | Partial impl of `Read`, `Write`, `Stdout`, & `Stderr` |

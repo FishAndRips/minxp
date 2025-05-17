@@ -17,7 +17,7 @@
 ### Added
 - Initial release
 - Increased coverage (ignoring non-core/alloc):
-  - env (100%)
+  - env (~80%, was incorrectly marked as 100%)
   - ffi (~80%)
   - fs (~80%)
   - io (~30%)

@@ -223,7 +223,7 @@ pub fn absolute<P: AsRef<Path>>(path: P) -> crate::io::Result<PathBuf> {
 
 type GetFinalPathNameByHandleW = unsafe extern "system" fn (HANDLE, windows_sys::core::PWSTR, u32, GETFINALPATHNAMEBYHANDLE_FLAGS) -> u32;
 
-const CANONICALIZE: Lazy<Box<dyn Fn(&Path) -> crate::io::Result<PathBuf>>> = Lazy::new(|| {
+static CANONICALIZE: Lazy<Box<dyn Fn(&Path) -> crate::io::Result<PathBuf> + Send + Sync>> = Lazy::new(|| {
     let get_final_path_name_by_handle: Option<GetFinalPathNameByHandleW> = get_proc_from_module!(
         "kernel32.dll",
         "GetFinalPathNameByHandleW"

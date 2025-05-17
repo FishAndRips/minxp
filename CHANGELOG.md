@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+### Added
+- `env::consts`
+- `env::args::os`
+- `env::home_dir`
+- `env::join_paths`
+- `env::vars_os`
+- `env::split_paths`
+- `env::temp_dir`
+
+### Changed
+- Added links to mentioned Win32 functions on the official Windows App Development documentation.
+
 ## [0.1.1] - 2025-04-26
 ### Added
 - `fs::absolute`, which calls `GetFullPathNameW` on all versions of Windows and does nothing if the path is already

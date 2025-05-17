@@ -95,6 +95,20 @@ static GET_TEMP_PATH: Lazy<GetTempPathWFn> = Lazy::new(|| {
     }
 });
 
+/// Get a temp directory.
+///
+/// # Compatibility notes
+///
+/// - On Windows 11 or newer, this uses [`GetTempPath2W`]
+/// - On any edition of Windows 10 that received the March 2025 monthly rollup, this also uses [`GetTempPath2W`]
+/// - On other versions of Windows, this uses [`GetTempPathW`]
+///
+/// The difference between `GetTempPath2` and `GetTempPath` is that `GetTempPath2` supports storing
+/// temporary files in a `SystemTemp` directory when running as a SYSTEM process. Otherwise, it will
+/// return the same value as `GetTempPath`.
+///
+/// [`GetTempPathW`]: https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-gettemppathw
+/// [`GetTempPath2W`]: https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-gettemppath2w
 pub fn temp_dir() -> PathBuf {
     let mut buffer = vec![0u16; MAX_PATH_EXTENDED + 1];
     let length = unsafe { GET_TEMP_PATH(buffer.len() as u32, buffer.as_mut_ptr()) };

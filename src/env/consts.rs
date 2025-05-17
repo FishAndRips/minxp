@@ -1,3 +1,9 @@
+//! Constants
+//!
+//! Most of these are derived from the Rust Standard Library values on Windows.
+//!
+//! [`ARCH`] is based on the [`CARGO_CFG_TARGET_ARCH`] environment value.
+
 // the value of CARGO_CFG_TARGET_ARCH when run by the build script
 pub const ARCH: &'static str = env!("MINXP_ENV_ARCH");
 

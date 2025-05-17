@@ -183,10 +183,12 @@ pub(crate) fn exists_infallible<P: AsRef<Path>>(path: P) -> bool {
 ///
 /// # Compatibility notes
 ///
-/// - On Windows Vista or newer, this uses the `GetFinalPathNameByHandleW` function, which also
+/// - On Windows Vista or newer, this uses the [`GetFinalPathNameByHandleW`] function, which also
 ///   resolves symlinks.
 /// - On Windows XP and older, this will just return the absolute path with an additional check for
 ///   if the path exists.
+///
+/// [`GetFinalPathNameByHandleW`]: https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-getfinalpathnamebyhandlew
 pub fn canonicalize<P: AsRef<Path>>(path: P) -> crate::io::Result<PathBuf> {
     CANONICALIZE(path.as_ref())
 }
@@ -195,6 +197,8 @@ pub fn canonicalize<P: AsRef<Path>>(path: P) -> crate::io::Result<PathBuf> {
 ///
 /// If the path is already absolute, this simply returns the path as a PathBuf. Otherwise, this uses
 /// the `GetFullPathNameW` function to get a full path.
+///
+/// [`GetFullPathNameW`]: https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-getfullpathnamew
 pub fn absolute<P: AsRef<Path>>(path: P) -> crate::io::Result<PathBuf> {
     let path = path.as_ref();
 

@@ -64,6 +64,7 @@ The following modules are provided:
 | `io`      | Partial   | Partial impl of `Read`, `Write`, `Stdout`, & `Stderr` |
 | `path`    | Partial   | Missing some trait impls                              |
 | `process` | Partial   | Only `abort` and `exit` for now                       |
+| `thread`  | Partial   | Can build/join, sleep/yield, park, and get thread id  |
 
 \* Only includes what's exclusively in `std`; types in `alloc` and `core` will
    not be (re-)implemented, as there is no need. If something is missing, try
@@ -77,10 +78,9 @@ such, this is only guaranteed to be accurate as of **1.87.0**.
 This is being developed on an as-needed basis for other FishAndRips projects. At
 the moment, this is what is expected:
 
-* More `io`, `fs`, and `ffi`
+* Finishing more of the above modules
 * `net`
 * `process`
-* `thread`
 * `time`
 
 As previously stated, this only includes what is exclusive to `std`. Some things

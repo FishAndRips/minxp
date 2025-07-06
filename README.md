@@ -56,13 +56,14 @@ applies to other compatibility layers, such as Proton.
 
 The following modules are provided:
 
-| Module | Coverage* | Notes                                                 |
-|--------|-----------|-------------------------------------------------------|
-| `env`  | Full      |                                                       |
-| `ffi`  | Partial   | Missing some trait impls, `Component`                 |
-| `fs`   | Partial   | Some functions not implemented; uses raw timestamps   |
-| `io`   | Partial   | Partial impl of `Read`, `Write`, `Stdout`, & `Stderr` |
-| `path` | Partial   | Missing some trait impls                              |
+| Module    | Coverage* | Notes                                                 |
+|-----------|-----------|-------------------------------------------------------|
+| `env`     | Full      |                                                       |
+| `ffi`     | Partial   | Missing some trait impls, `Component`                 |
+| `fs`      | Partial   | Some functions not implemented; uses raw timestamps   |
+| `io`      | Partial   | Partial impl of `Read`, `Write`, `Stdout`, & `Stderr` |
+| `path`    | Partial   | Missing some trait impls                              |
+| `process` | Partial   | Only `abort` and `exit` for now                       |
 
 \* Only includes what's exclusively in `std`; types in `alloc` and `core` will
    not be (re-)implemented, as there is no need. If something is missing, try

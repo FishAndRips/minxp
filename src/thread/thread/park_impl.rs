@@ -44,9 +44,9 @@ fn get_wait_on_address_park_impl(
 ) -> ParkImpl {
     ParkImpl {
         park: Box::new(move |duration_maybe: Option<Duration>| {
-            let parked = current().parked.clone();
+            let thread_inner = current().inner.clone();
             let original_value = true;
-            parked.store(original_value, Ordering::Relaxed);
+            thread_inner.parked.store(original_value, Ordering::Relaxed);
 
             let ms = duration_maybe
                 .map(|m| m.as_millis().min(u32::MAX.into()) as u32)
@@ -54,18 +54,18 @@ fn get_wait_on_address_park_impl(
 
             unsafe {
                 wait_on_address(
-                    parked.as_ptr() as *const c_void,
+                    thread_inner.parked.as_ptr() as *const c_void,
                     &original_value as *const bool as *const c_void,
                     size_of_val(&original_value),
                     ms
                 )
             };
 
-            parked.store(false, Ordering::Relaxed);
+            thread_inner.parked.store(false, Ordering::Relaxed);
         }),
         wake: Box::new(move |thread: &Thread| {
-            thread.parked.store(false, Ordering::Relaxed);
-            unsafe { wake_by_address_all(thread.parked.as_ptr() as *mut c_void) };
+            thread.inner.parked.store(false, Ordering::Relaxed);
+            unsafe { wake_by_address_all(thread.inner.parked.as_ptr() as *mut c_void) };
         })
     }
 }
@@ -73,8 +73,8 @@ fn get_wait_on_address_park_impl(
 fn get_busy_wait_park_impl() -> ParkImpl {
     ParkImpl {
         park: Box::new(|duration_maybe: Option<Duration>| {
-            let parked = current().parked.clone();
-            parked.store(true, Ordering::Relaxed);
+            let parked_inner = current().inner.clone();
+            parked_inner.parked.store(true, Ordering::Relaxed);
 
             match duration_maybe {
                 Some(timeout) => {
@@ -84,21 +84,21 @@ fn get_busy_wait_park_impl() -> ParkImpl {
                     assert_ne!(counter, 0, "QueryPerformanceCounter got zero counter");
                     unsafe { QueryPerformanceCounter(&mut start) };
                     let ms_counter = (counter / 1000).max(1).cast_unsigned();
-                    while parked.load(Ordering::Relaxed) {
+                    while parked_inner.parked.load(Ordering::Relaxed) {
                         let mut now = 0i64;
                         unsafe { QueryPerformanceCounter(&mut now) };
 
                         let delta = now.wrapping_sub(start).cast_unsigned() / ms_counter;
                         if delta as u128 > timeout.as_millis() {
-                            parked.store(false, Ordering::Relaxed);
+                            parked_inner.parked.store(false, Ordering::Relaxed);
                         }
                     }
                 }
-                None => while parked.load(Ordering::Relaxed) {}
+                None => while parked_inner.parked.load(Ordering::Relaxed) {}
             }
         }),
         wake: Box::new(|thread: &Thread| {
-            thread.parked.store(false, Ordering::Relaxed);
+            thread.inner.parked.store(false, Ordering::Relaxed);
         })
     }
 }

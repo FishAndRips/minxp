@@ -1,4 +1,6 @@
 mod park_impl;
+
+use alloc::borrow::ToOwned;
 use park_impl::PARK_IMPL;
 
 use alloc::collections::BTreeMap;
@@ -11,31 +13,37 @@ use spin::Mutex;
 use windows_sys::Win32::Foundation::HANDLE;
 use windows_sys::Win32::System::Threading::{GetCurrentThread, GetCurrentThreadId, Sleep};
 
+struct ThreadInner {
+    name: Option<String>,
+    thread_id: UnsafeCell<u32>,
+    parked: AtomicBool
+}
+
 #[derive(Clone)]
 pub struct Thread {
-    name: Option<Arc<String>>,
-    thread_id: Arc<UnsafeCell<u32>>,
-    parked: Arc<AtomicBool>
+    inner: Arc<ThreadInner>
 }
 
 impl Thread {
     pub(in crate::thread) fn new(
-        name: Option<Arc<String>>,
+        name: Option<String>,
         thread_id: u32
     ) -> Self {
         Self {
-            name,
-            thread_id: Arc::new(UnsafeCell::new(thread_id)),
-            parked: Arc::new(AtomicBool::new(false))
+            inner: Arc::new(ThreadInner {
+                name,
+                thread_id: UnsafeCell::new(thread_id),
+                parked: AtomicBool::new(false)
+            })
         }
     }
 
     pub(in crate::thread) fn thread_id_ptr(&self) -> *mut u32 {
-        self.thread_id.get()
+        self.inner.thread_id.get()
     }
 
     pub(in crate::thread) fn set_thread_handle(&self, handle: HANDLE) -> *mut u32 {
-        self.thread_id.get()
+        self.inner.thread_id.get()
     }
 
     pub fn unpark(&self) {
@@ -44,11 +52,11 @@ impl Thread {
 
     pub fn id(&self) -> ThreadId {
         // SAFETY: By now, this shouldn't be written anymore.
-        ThreadId(unsafe { *self.thread_id.get() })
+        ThreadId(unsafe { *self.inner.thread_id.get() })
     }
 
     pub fn name(&self) -> Option<&str> {
-        self.name.as_ref().map(|n| n.as_str())
+        self.inner.name.as_ref().map(String::as_str)
     }
 }
 
@@ -84,7 +92,7 @@ pub fn current() -> Thread {
     let current_thread = current_thread_id();
 
     match threads.get(&current_thread) {
-        Some(n) => n.clone(),
+        Some(n) => n.to_owned(),
         None => {
             let t = Thread::new(None, current_thread);
             threads.insert(current_thread, t.clone());

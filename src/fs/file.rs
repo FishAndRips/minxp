@@ -73,11 +73,11 @@ impl File {
     }
 
     pub fn create<P: AsRef<Path>>(path: P) -> Result<Self> {
-        Self::options().create(true).open(path)
+        Self::options().read(true).write(true).create(true).open(path)
     }
 
     pub fn create_new<P: AsRef<Path>>(path: P) -> Result<Self> {
-        Self::options().create_new(true).open(path)
+        Self::options().read(true).write(true).create_new(true).open(path)
     }
 
     pub fn options() -> OpenOptions {
@@ -163,7 +163,6 @@ impl Read for File {
 impl Write for File {
     fn write(&mut self, buf: &[u8]) -> Result<usize> {
         let bytes_to_write = buf.len().min(u32::MAX as usize) as u32;
-
         let mut number_of_bytes_written = 0;
         let result = unsafe {
             WriteFile(
@@ -273,6 +272,14 @@ impl OpenOptions {
     }
 
     pub fn open<P: AsRef<Path>>(&self, path: P) -> Result<File> {
+        let is_writable = self.write || self.append;
+        if !is_writable && self.create {
+            return Err(Error { reason: format!("open with create but not write or append") });
+        }
+        if !is_writable && self.create_new {
+            return Err(Error { reason: format!("open with create_new but not write or append") });
+        }
+
         let mut desired_access = 0;
         let mut share_access = 0;
 

@@ -256,7 +256,7 @@ impl Path {
         }
     }
 
-    pub fn ancestors(&self) -> Ancestors {
+    pub fn ancestors(&'_ self) -> Ancestors<'_> {
         Ancestors { path: self }
     }
 
@@ -345,11 +345,11 @@ impl Path {
         p
     }
 
-    pub fn components(&self) -> Components {
+    pub fn components(&'_ self) -> Components<'_> {
         Components { iter: self.iter() }
     }
 
-    pub fn iter(&self) -> Iter {
+    pub fn iter(&'_ self) -> Iter<'_> {
         let string = self.inner.as_str();
         Iter {
             iter: string.split(is_separator),
